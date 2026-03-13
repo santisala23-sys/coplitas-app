@@ -108,7 +108,7 @@ export default function Home() {
           className={`pb-3 text-lg font-bold px-2 ${activeTab === 'catalogo' ? 'text-purple-600 border-b-4 border-purple-600 -mb-0.5' : 'text-gray-400 hover:text-gray-600'}`}
           onClick={() => setActiveTab('catalogo')}
         >
-          Catálogo de Canciones
+          Canciones
         </button>
         <button 
           className={`pb-3 text-lg font-bold px-2 ${activeTab === 'planis' ? 'text-emerald-600 border-b-4 border-emerald-600 -mb-0.5' : 'text-gray-400 hover:text-gray-600'}`}
