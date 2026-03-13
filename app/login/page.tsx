@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Cookies from 'js-cookie'
-import Image from 'next/image' // Importamos el componente Image
 
 export default function LoginPage() {
   const [pin, setPin] = useState('')
@@ -27,15 +26,12 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-sm text-center">
         
-        {/* Logo de Coplitas */}
+        {/* Logo de Coplitas (Usando etiqueta nativa HTML) */}
         <div className="mb-6 flex justify-center">
-          <Image
-            src="/logo.jpeg" // Ruta a la imagen en la carpeta public
-            alt=""
-            width={150} // Ancho en píxeles
-            height={150} // Alto en píxeles (ajústalo si es necesario)
-            className="rounded-full" // Opcional: para que se vea redondo
-            priority // Carga la imagen rápido
+          <img
+            src="/logo.jpeg"
+            alt="Logo Coplitas para Crecer"
+            className="w-[150px] h-[150px] object-cover rounded-full shadow-sm"
           />
         </div>
 
