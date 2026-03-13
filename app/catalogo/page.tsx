@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import SongModal from '../components/SongModal' // IMPORTANTE: Fijate que la ruta ahora usa ../
+import Cookies from 'js-cookie' // <-- AGREGADO PARA LEER EL ROL
 
 export default function CatalogoPage() {
   // Estados para Canciones
@@ -10,12 +11,17 @@ export default function CatalogoPage() {
   const [filteredCanciones, setFilteredCanciones] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
+  
+  // <-- AGREGADO: Estado para guardar si es ADMIN o USER
+  const [userRole, setUserRole] = useState<string | null>(null) 
 
   // Estados para el Modal
   const [isSongModalOpen, setIsSongModalOpen] = useState(false)
   const [cancionEditando, setCancionEditando] = useState<any>(null)
 
   useEffect(() => {
+    // Al cargar la página, leemos el rol del usuario que se logueó
+    setUserRole(Cookies.get('coplitas_role') || 'USER')
     fetchCanciones()
   }, [])
 
@@ -71,14 +77,18 @@ export default function CatalogoPage() {
       <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b pb-4">
         <div>
           <h1 className="text-3xl font-bold mb-1 text-gray-800">Catálogo de Canciones</h1>
-          <p className="text-gray-600">Gestor de Rondas Infantiles</p>
+          <p className="text-gray-600">Gestor de Canciones</p>
         </div>
-        <button 
-          onClick={() => { setCancionEditando(null); setIsSongModalOpen(true); }} 
-          className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-3 rounded-xl font-semibold shadow-sm transition w-full md:w-auto"
-        >
-          + Nueva Canción
-        </button>
+        
+        {/* <-- AGREGADO: Solo ADMIN ve el botón de Nueva Canción */}
+        {userRole === 'ADMIN' && (
+          <button 
+            onClick={() => { setCancionEditando(null); setIsSongModalOpen(true); }} 
+            className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-3 rounded-xl font-semibold shadow-sm transition w-full md:w-auto"
+          >
+            + Nueva Canción
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -100,12 +110,17 @@ export default function CatalogoPage() {
           <div className="grid gap-6">
             {filteredCanciones.map((cancion) => (
               <div key={cancion.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 relative group">
-                <div className="absolute top-4 right-4 flex gap-2">
-                  <button onClick={() => { setCancionEditando(cancion); setIsSongModalOpen(true); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg text-sm font-medium transition">Editar</button>
-                  <button onClick={() => handleEliminarCancion(cancion.id, cancion.titulo)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition">Borrar</button>
-                </div>
+                
+                {/* <-- AGREGADO: Solo ADMIN ve los botones Editar/Borrar */}
+                {userRole === 'ADMIN' && (
+                  <div className="absolute top-4 right-4 flex gap-2">
+                    <button onClick={() => { setCancionEditando(cancion); setIsSongModalOpen(true); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg text-sm font-medium transition">Editar</button>
+                    <button onClick={() => handleEliminarCancion(cancion.id, cancion.titulo)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition">Borrar</button>
+                  </div>
+                )}
 
-                <h2 className="text-2xl font-semibold mb-3 text-gray-800 pr-32">{cancion.titulo}</h2>
+                {/* Si no es admin le sacamos el padding a la derecha para que quede centrado */}
+                <h2 className={`text-2xl font-semibold mb-3 text-gray-800 ${userRole === 'ADMIN' ? 'pr-32' : ''}`}>{cancion.titulo}</h2>
                 
                 <div className="flex flex-col gap-2 mb-4">
                   {cancion.cancion_momento?.length > 0 && (

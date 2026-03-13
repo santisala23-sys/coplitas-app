@@ -3,17 +3,23 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import PlaniModal from '../components/PlaniModal'
+import Cookies from 'js-cookie' // <-- AGREGADO
 
 export default function PlanisPage() {
   const [planis, setPlanis] = useState<any[]>([])
   const [cancionesParaCatalogo, setCancionesParaCatalogo] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // <-- AGREGADO: Estado para el rol
+  const [userRole, setUserRole] = useState<string | null>(null)
 
   // Estados para el Modal de Planis
   const [isPlaniModalOpen, setIsPlaniModalOpen] = useState(false)
   const [planiEditando, setPlaniEditando] = useState<any>(null)
 
   useEffect(() => {
+    // Leemos el rol
+    setUserRole(Cookies.get('coplitas_role') || 'USER')
     fetchData()
   }, [])
 
@@ -81,12 +87,16 @@ export default function PlanisPage() {
           <h1 className="text-3xl font-bold mb-1 text-gray-800">Mis Planis</h1>
           <p className="text-gray-600">Armado y estructura de las rondas</p>
         </div>
-        <button 
-          onClick={handleNuevaPlani} 
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl font-semibold shadow-sm transition w-full md:w-auto"
-        >
-          + Armar Nueva Plani
-        </button>
+        
+        {/* <-- AGREGADO: Solo ADMIN puede armar Planis */}
+        {userRole === 'ADMIN' && (
+          <button 
+            onClick={handleNuevaPlani} 
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl font-semibold shadow-sm transition w-full md:w-auto"
+          >
+            + Armar Nueva Plani
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -96,7 +106,7 @@ export default function PlanisPage() {
           {planis.length === 0 ? (
             <div className="text-center py-16 bg-white border border-dashed border-gray-300 rounded-2xl">
               <p className="text-gray-500 text-lg">No hay planificaciones armadas todavía.</p>
-              <p className="text-gray-400 text-sm mt-2">Creá tu primera plani para estructurar una ronda.</p>
+              {userRole === 'ADMIN' && <p className="text-gray-400 text-sm mt-2">Creá tu primera plani para estructurar una ronda.</p>}
             </div>
           ) : (
             <div className="grid gap-6">
@@ -106,16 +116,20 @@ export default function PlanisPage() {
 
                 return (
                   <div key={plani.id} className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-100 relative group border-t-4 border-t-emerald-500">
-                    <div className="absolute top-4 right-4 flex gap-2">
-                      <button onClick={() => handleEditarPlani(plani)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg text-sm font-medium transition">
-                        Editar
-                      </button>
-                      <button onClick={() => handleEliminarPlani(plani.id, plani.titulo)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition">
-                        Borrar
-                      </button>
-                    </div>
+                    
+                    {/* <-- AGREGADO: Solo ADMIN ve botones Editar/Borrar */}
+                    {userRole === 'ADMIN' && (
+                      <div className="absolute top-4 right-4 flex gap-2">
+                        <button onClick={() => handleEditarPlani(plani)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg text-sm font-medium transition">
+                          Editar
+                        </button>
+                        <button onClick={() => handleEliminarPlani(plani.id, plani.titulo)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition">
+                          Borrar
+                        </button>
+                      </div>
+                    )}
 
-                    <h2 className="text-2xl font-bold mb-1 text-gray-800 pr-32">{plani.titulo}</h2>
+                    <h2 className={`text-2xl font-bold mb-1 text-gray-800 ${userRole === 'ADMIN' ? 'pr-32' : ''}`}>{plani.titulo}</h2>
                     {plani.descripcion && <p className="text-gray-600 mb-6">{plani.descripcion}</p>}
 
                     <div>
