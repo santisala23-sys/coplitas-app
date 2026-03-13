@@ -175,7 +175,7 @@ export default function Home() {
                     )}
 
                     <div className="mt-4 pt-4 border-t flex flex-col sm:flex-row gap-4 items-center justify-between bg-gray-50 -mx-6 -mb-6 p-6 rounded-b-2xl">
-                      {cancion.audio_url ? <audio controls src={cancion.audio_url} className="w-full sm:w-2/3 h-10" /> : <p className="text-sm text-gray-400 italic">Audio no disponible</p>}
+                      {cancion.audio_url ? <audio controls src={cancion.audio_url} className="w-full sm:w-2/3 h-10" /> : <p className="text-sm text-gray-400 italic">Audio no cargado</p>}
                       {cancion.letra_url && <a href={cancion.letra_url} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-purple-700 transition shadow-sm text-center w-full sm:w-auto">Ver Letra</a>}
                     </div>
                   </div>
