@@ -10,10 +10,10 @@ export default function Navbar() {
   if (pathname === '/login') return null
 
   const navLinks = [
-    { name: 'Catálogo', href: '/catalogo', icon: '🎵' },
-    { name: 'Planis', href: '/planis', icon: '📋' },
-   // { name: 'Eventos', href: '/eventos', icon: '🎉' },
-    //{ name: 'Finanzas', href: '/finanzas', icon: '💰' },
+    { name: 'Catálogo', href: '/catalogo', icon: '' },
+    { name: 'Planis', href: '/planis', icon: '' },
+   // { name: 'Eventos', href: '/eventos', icon: '' },
+    //{ name: 'Finanzas', href: '/finanzas', icon: '' },
   ]
 
   return (
