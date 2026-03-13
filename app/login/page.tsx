@@ -31,7 +31,7 @@ export default function LoginPage() {
         <div className="mb-6 flex justify-center">
           <Image
             src="/logo.jpeg" // Ruta a la imagen en la carpeta public
-            alt="Logo Coplitas para Crecer"
+            alt=""
             width={150} // Ancho en píxeles
             height={150} // Alto en píxeles (ajústalo si es necesario)
             className="rounded-full" // Opcional: para que se vea redondo
