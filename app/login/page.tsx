@@ -26,15 +26,6 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-sm text-center">
         
-        {/* Logo de Coplitas (Usando etiqueta nativa HTML) */}
-        <div className="mb-6 flex justify-center">
-          <img
-            src="/logo.jpeg"
-            alt="Logo Coplitas para Crecer"
-            className="w-[150px] h-[150px] object-cover rounded-full shadow-sm"
-          />
-        </div>
-
         <h1 className="text-2xl font-bold mb-6 text-gray-800">Coplitas para Crecer</h1>
         
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
