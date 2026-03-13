@@ -45,12 +45,14 @@ export default function Home() {
     }
 
     // 2. Traer Planificaciones
+    // ¡NUEVO!: Se agregó "nota" en el select de planificacion_cancion
     const { data: dataPlanis } = await supabase
       .from('planificaciones')
       .select(`
         id, titulo, descripcion, created_at,
         planificacion_cancion (
           orden,
+          nota,
           cancion:canciones ( id, titulo, audio_url, letra_url )
         )
       `)
@@ -201,7 +203,6 @@ export default function Home() {
               ) : (
                 <div className="grid gap-6">
                   {planis.map((plani) => {
-                    // Ordenamos las canciones de la plani para mostrarlas correctamente
                     const cancionesDePlani = [...plani.planificacion_cancion].sort((a: any, b: any) => a.orden - b.orden);
 
                     return (
@@ -217,18 +218,28 @@ export default function Home() {
                         <div className="mt-4">
                           <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Estructura de la sesión</h3>
                           <ul className="flex flex-col gap-2">
+                            {/* ¡NUEVO!: Se cambió la estructura del <li> para renderizar la nota */}
                             {cancionesDePlani.map((item: any, index: number) => (
-                              <li key={index} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
-                                <span className="font-medium text-gray-800">
-                                  <span className="text-emerald-500 font-bold mr-3">{item.orden}.</span>
-                                  {item.cancion?.titulo || 'Canción eliminada del catálogo'}
-                                </span>
-                                
-                                <div className="flex gap-2">
-                                  {item.cancion?.audio_url && (
-                                    <audio src={item.cancion.audio_url} controls className="h-8 w-40" />
-                                  )}
+                              <li key={index} className="flex flex-col bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                <div className="flex justify-between items-center w-full">
+                                  <span className="font-medium text-gray-800">
+                                    <span className="text-emerald-500 font-bold mr-3">{item.orden}.</span>
+                                    {item.cancion?.titulo || 'Canción eliminada del catálogo'}
+                                  </span>
+                                  
+                                  <div className="flex gap-2 shrink-0">
+                                    {item.cancion?.audio_url && (
+                                      <audio src={item.cancion.audio_url} controls className="h-8 w-40" />
+                                    )}
+                                  </div>
                                 </div>
+                                
+                                {/* Mostrar la nota si existe */}
+                                {item.nota && (
+                                  <div className="ml-7 mt-2 text-sm text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded border border-emerald-100 italic">
+                                    💬 {item.nota}
+                                  </div>
+                                )}
                               </li>
                             ))}
                           </ul>

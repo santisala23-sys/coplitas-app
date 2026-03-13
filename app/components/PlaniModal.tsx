@@ -6,12 +6,11 @@ import { supabase } from '@/lib/supabase'
 export default function PlaniModal({ isOpen, onClose, planiAEditar, onSave, catalogo }: any) {
   const [titulo, setTitulo] = useState('')
   const [descripcion, setDescripcion] = useState('')
-  const [cancionesSeleccionadas, setCancionesSeleccionadas] = useState<any[]>([])
+  // Ahora guardamos objetos con la canción y su nota: { cancion: {id, titulo...}, nota: '' }
+  const [itemsRonda, setItemsRonda] = useState<any[]>([]) 
   
-  // Estados para el nuevo buscador/selector
   const [searchTerm, setSearchTerm] = useState('') 
   const [selectedCancionId, setSelectedCancionId] = useState<string>('') 
-  
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
@@ -19,44 +18,42 @@ export default function PlaniModal({ isOpen, onClose, planiAEditar, onSave, cata
       setTitulo(planiAEditar.titulo || '')
       setDescripcion(planiAEditar.descripcion || '')
       if (planiAEditar.planificacion_cancion) {
-        const cancionesOrdenadas = [...planiAEditar.planificacion_cancion]
+        // Recuperamos la canción, la nota y ordenamos
+        const ordenados = [...planiAEditar.planificacion_cancion]
           .sort((a: any, b: any) => a.orden - b.orden)
-          .map((pc: any) => pc.cancion)
-        setCancionesSeleccionadas(cancionesOrdenadas)
+          .map((pc: any) => ({
+            cancion: pc.cancion,
+            nota: pc.nota || ''
+          }))
+        setItemsRonda(ordenados)
       } else {
-        setCancionesSeleccionadas([])
+        setItemsRonda([])
       }
     } else {
       setTitulo('')
       setDescripcion('')
-      setCancionesSeleccionadas([])
+      setItemsRonda([])
     }
     setSearchTerm('')
     setSelectedCancionId('')
   }, [planiAEditar, isOpen])
 
-  // --- Lógica de filtrado en tiempo real (ahora muestra TODAS si no hay búsqueda) ---
   const catalogoFiltrado = useMemo(() => {
     const term = searchTerm.toLowerCase()
     return catalogo.filter((cancion: any) => {
-      // 1. Ocultar las que ya están agregadas a la plani
-      if (cancionesSeleccionadas.some(cs => cs.id === cancion.id)) return false
-
-      // 2. Si no escribió nada, mostramos todo lo disponible
+      // Ocultar las que ya están en la plani
+      if (itemsRonda.some(item => item.cancion.id === cancion.id)) return false
       if (!term) return true 
 
-      // 3. Buscar por título, momento o temática
       if (cancion.titulo.toLowerCase().includes(term)) return true
-      
       const momentos = cancion.cancion_momento?.map((cm: any) => cm.momentos.nombre.toLowerCase()) || []
       if (momentos.some((m: string) => m.includes(term))) return true
-      
       const tematicas = cancion.cancion_tematica?.map((ct: any) => ct.tematicas.nombre.toLowerCase()) || []
       if (tematicas.some((t: string) => t.includes(term))) return true
 
       return false
-    }) // Sacamos el .slice() para que se pueda scrollear todo
-  }, [searchTerm, catalogo, cancionesSeleccionadas])
+    })
+  }, [searchTerm, catalogo, itemsRonda])
 
   if (!isOpen) return null
 
@@ -64,28 +61,36 @@ export default function PlaniModal({ isOpen, onClose, planiAEditar, onSave, cata
   const agregarCancion = () => {
     const cancion = catalogo.find((c: any) => c.id === selectedCancionId)
     if (cancion) {
-      setCancionesSeleccionadas([...cancionesSeleccionadas, cancion])
-      setSelectedCancionId('') // Limpiar selección
-      setSearchTerm('') // Limpiar búsqueda para ver el catálogo completo de nuevo
+      // Agregamos el objeto con la nota vacía
+      setItemsRonda([...itemsRonda, { cancion: cancion, nota: '' }])
+      setSelectedCancionId('')
+      setSearchTerm('')
     }
   }
 
   const quitarCancion = (index: number) => {
-    const nuevas = [...cancionesSeleccionadas]
+    const nuevas = [...itemsRonda]
     nuevas.splice(index, 1)
-    setCancionesSeleccionadas(nuevas)
+    setItemsRonda(nuevas)
   }
 
   const moverCancion = (index: number, direccion: 'up' | 'down') => {
     if (direccion === 'up' && index === 0) return
-    if (direccion === 'down' && index === cancionesSeleccionadas.length - 1) return
+    if (direccion === 'down' && index === itemsRonda.length - 1) return
 
-    const nuevas = [...cancionesSeleccionadas]
+    const nuevas = [...itemsRonda]
     const temp = nuevas[index]
     const swapIndex = direccion === 'up' ? index - 1 : index + 1
     nuevas[index] = nuevas[swapIndex]
     nuevas[swapIndex] = temp
-    setCancionesSeleccionadas(nuevas)
+    setItemsRonda(nuevas)
+  }
+
+  // Nueva función para actualizar la nota de un ítem específico
+  const actualizarNota = (index: number, nuevaNota: string) => {
+    const nuevas = [...itemsRonda]
+    nuevas[index].nota = nuevaNota
+    setItemsRonda(nuevas)
   }
 
   // --- Guardar en Supabase ---
@@ -106,11 +111,12 @@ export default function PlaniModal({ isOpen, onClose, planiAEditar, onSave, cata
 
       await supabase.from('planificacion_cancion').delete().eq('planificacion_id', planiId)
 
-      if (cancionesSeleccionadas.length > 0) {
-        const inserts = cancionesSeleccionadas.map((c, index) => ({
+      if (itemsRonda.length > 0) {
+        const inserts = itemsRonda.map((item, index) => ({
           planificacion_id: planiId,
-          cancion_id: c.id,
-          orden: index + 1
+          cancion_id: item.cancion.id,
+          orden: index + 1,
+          nota: item.nota // Guardamos la nota específica
         }))
         await supabase.from('planificacion_cancion').insert(inserts)
       }
@@ -129,7 +135,6 @@ export default function PlaniModal({ isOpen, onClose, planiAEditar, onSave, cata
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[95vh] overflow-hidden flex flex-col">
         
-        {/* Header del Modal */}
         <div className="p-5 border-b bg-white flex justify-between items-center shrink-0">
           <h2 className="text-xl font-bold text-gray-800">
             {planiAEditar ? 'Editar Plani' : 'Armar Nueva Plani'}
@@ -137,7 +142,6 @@ export default function PlaniModal({ isOpen, onClose, planiAEditar, onSave, cata
           <button onClick={onClose} className="text-gray-400 hover:text-gray-800 font-bold text-xl p-2">✕</button>
         </div>
 
-        {/* Formulario Scrolleable */}
         <form onSubmit={handleSave} className="p-6 flex flex-col gap-6 overflow-y-auto">
           
           <div className="grid gap-4">
@@ -157,7 +161,7 @@ export default function PlaniModal({ isOpen, onClose, planiAEditar, onSave, cata
             </div>
           </div>
 
-          {/* === NUEVO BUSCADOR Y LISTA SCROLLEABLE === */}
+          {/* BUSCADOR */}
           <div className="bg-emerald-50 p-5 rounded-xl border border-emerald-100 shadow-inner flex flex-col gap-3">
             <label className="block text-sm font-semibold text-emerald-800">
               Buscar y Agregar Canciones a la Ronda
@@ -181,7 +185,6 @@ export default function PlaniModal({ isOpen, onClose, planiAEditar, onSave, cata
               </button>
             </div>
 
-            {/* Caja de resultados con Scroll constante */}
             <div className="bg-white border border-gray-200 rounded-lg max-h-48 overflow-y-auto shadow-sm">
               {catalogoFiltrado.length > 0 ? (
                 <ul className="divide-y divide-gray-100">
@@ -216,33 +219,49 @@ export default function PlaniModal({ isOpen, onClose, planiAEditar, onSave, cata
             </div>
           </div>
 
-          {/* === LISTA DE CANCIONES SELECCIONADAS === */}
+          {/* LISTA DE CANCIONES Y NOTAS */}
           <div>
             <div className="flex justify-between items-end mb-3">
               <label className="block text-sm font-semibold text-gray-700">
-                Estructura de la Ronda ({cancionesSeleccionadas.length})
+                Estructura de la Ronda ({itemsRonda.length})
               </label>
             </div>
             
-            {cancionesSeleccionadas.length === 0 ? (
+            {itemsRonda.length === 0 ? (
               <p className="text-sm text-gray-500 italic p-6 text-center border-2 border-dashed border-gray-300 rounded-xl bg-gray-50">
-                Aún no agregaste canciones. Seleccioná una arriba y dale a "Agregar".
+                Aún no agregaste canciones.
               </p>
             ) : (
-              <ul className="flex flex-col gap-2">
-                {cancionesSeleccionadas.map((cancion, index) => (
-                  <li key={cancion.id} className="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-xl shadow-sm">
-                    <span className="font-medium text-gray-800 truncate pr-4">
-                      <span className="bg-emerald-100 text-emerald-800 w-6 h-6 inline-flex justify-center items-center rounded-full text-xs font-bold mr-3">
-                        {index + 1}
-                      </span> 
-                      {cancion.titulo}
-                    </span>
-                    <div className="flex gap-1 shrink-0 bg-gray-50 rounded-lg p-1 border">
-                      <button type="button" onClick={() => moverCancion(index, 'up')} disabled={index === 0} className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-white rounded-md disabled:opacity-30 transition">⬆️</button>
-                      <button type="button" onClick={() => moverCancion(index, 'down')} disabled={index === cancionesSeleccionadas.length - 1} className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-white rounded-md disabled:opacity-30 transition">⬇️</button>
-                      <div className="w-px bg-gray-200 mx-1"></div>
-                      <button type="button" onClick={() => quitarCancion(index)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition">❌</button>
+              <ul className="flex flex-col gap-3">
+                {itemsRonda.map((item, index) => (
+                  <li key={item.cancion.id} className="bg-white border border-gray-200 p-3 rounded-xl shadow-sm flex flex-col gap-2">
+                    
+                    {/* Fila 1: Título y Controles */}
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-gray-800 truncate pr-4 flex items-center">
+                        <span className="bg-emerald-100 text-emerald-800 w-6 h-6 inline-flex justify-center items-center rounded-full text-xs font-bold mr-3 shrink-0">
+                          {index + 1}
+                        </span> 
+                        {item.cancion.titulo}
+                      </span>
+                      <div className="flex gap-1 shrink-0 bg-gray-50 rounded-lg p-1 border">
+                        <button type="button" onClick={() => moverCancion(index, 'up')} disabled={index === 0} className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-white rounded-md disabled:opacity-30 transition">⬆️</button>
+                        <button type="button" onClick={() => moverCancion(index, 'down')} disabled={index === itemsRonda.length - 1} className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-white rounded-md disabled:opacity-30 transition">⬇️</button>
+                        <div className="w-px bg-gray-200 mx-1"></div>
+                        <button type="button" onClick={() => quitarCancion(index)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition">❌</button>
+                      </div>
+                    </div>
+
+                    {/* Fila 2: Input para la Nota/Transición */}
+                    <div className="ml-9 mr-1 text-sm bg-gray-50 border border-gray-100 rounded-lg overflow-hidden flex items-start">
+                        <span className="text-gray-400 py-2 px-3 pl-2 select-none text-xs">💬</span>
+                        <input 
+                          type="text" 
+                          placeholder='Ej: "Hoola, ¿cómo están?" / Materiales: 2 pañuelos'
+                          value={item.nota}
+                          onChange={(e) => actualizarNota(index, e.target.value)}
+                          className="w-full bg-transparent p-2 pl-0 text-gray-600 placeholder-gray-400 focus:outline-none focus:ring-0 text-sm"
+                        />
                     </div>
                   </li>
                 ))}
@@ -250,7 +269,6 @@ export default function PlaniModal({ isOpen, onClose, planiAEditar, onSave, cata
             )}
           </div>
 
-          {/* Botones de Guardar */}
           <div className="mt-2 flex justify-end gap-3 border-t pt-6 shrink-0 bg-white">
             <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl font-medium text-gray-600 hover:bg-gray-100 transition border">Cancelar</button>
             <button type="submit" disabled={isSaving} className="px-6 py-2.5 rounded-xl font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition shadow-sm">
