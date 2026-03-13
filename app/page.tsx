@@ -101,7 +101,7 @@ export default function Home() {
       {/* CABECERA */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold mb-1 text-gray-800">Coplitas para Crecer</h1>
-        <p className="text-gray-600">Gestor de Rondas Infantiles</p>
+        <p className="text-gray-600"></p>
       </div>
 
       {/* TABS DE NAVEGACIÓN */}
