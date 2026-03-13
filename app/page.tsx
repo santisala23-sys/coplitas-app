@@ -35,7 +35,7 @@ export default function HomePage() {
       
       {/* Mensaje de Bienvenida */}
       <div className="mb-10 text-center">
-        <h1 className="text-4xl md:text-5xl font-bold text-gray-800 mb-3">¡Hola, equipo! 👋</h1>
+        <h1 className="text-4xl md:text-5xl font-bold text-gray-800 mb-3">¡Hola, equipo! </h1>
         <p className="text-lg md:text-xl text-gray-600">Bienvenidas al panel de control de Coplitas para Crecer.</p>
       </div>
 
@@ -45,7 +45,7 @@ export default function HomePage() {
         {/* Card Catálogo */}
         <Link href="/catalogo" className="bg-white p-8 rounded-3xl shadow-sm border border-purple-100 hover:shadow-lg hover:border-purple-300 transition-all group flex flex-col items-center text-center">
           <div className="w-20 h-20 bg-purple-50 rounded-2xl flex items-center justify-center text-4xl mb-6 group-hover:scale-110 transition-transform">
-            🎵
+            
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Catálogo</h2>
           <p className="text-gray-500 mb-6 flex-grow">Gestioná las canciones, subí audios, letras y ajustá las etiquetas y anotaciones.</p>
@@ -66,7 +66,7 @@ export default function HomePage() {
         {/* Card Planis */}
         <Link href="/planis" className="bg-white p-8 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-lg hover:border-emerald-300 transition-all group flex flex-col items-center text-center">
           <div className="w-20 h-20 bg-emerald-50 rounded-2xl flex items-center justify-center text-4xl mb-6 group-hover:scale-110 transition-transform">
-            📋
+            
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Mis Planis</h2>
           <p className="text-gray-500 mb-6 flex-grow">Armá y estructurá las rondas infantiles dejando notas de transición para la sesión.</p>
