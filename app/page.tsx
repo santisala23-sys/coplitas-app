@@ -151,7 +151,7 @@ export default function Home() {
                 {cancion.audio_url ? (
                   <audio controls src={cancion.audio_url} className="w-full sm:w-2/3 h-10" />
                 ) : (
-                  <p className="text-sm text-gray-400 italic">Audio no disponible</p>
+                  <p className="text-sm text-gray-400 italic">Audio no cargado</p>
                 )}
 
                 {cancion.letra_url && (
