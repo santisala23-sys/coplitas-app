@@ -3,40 +3,44 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import Cookies from 'js-cookie'
+import { useEffect, useState } from 'react'
 
 export default function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
+  
+  // Guardamos el nombre de usuario en un estado
+  const [username, setUsername] = useState('Equipo')
+
+  useEffect(() => {
+    // Apenas carga el componente, leemos la cookie con el nombre
+    const user = Cookies.get('coplitas_user')
+    if (user) {
+      setUsername(user)
+    }
+  }, [])
 
   // No mostramos la navbar en la pantalla de login
   if (pathname === '/login') return null
 
-  // Agregamos el Inicio (Home) a la lista
   const navLinks = [
-    { name: 'Inicio', href: '/', icon: '', exact: true }, // exact: true para que no quede siempre activo
-    { name: 'Catálogo', href: '/catalogo', icon: '' },
-    { name: 'Planis', href: '/planis', icon: '' },
-    // { name: 'Eventos', href: '/eventos', icon: '' },
-    // { name: 'Finanzas', href: '/finanzas', icon: '' },
+    { name: 'Inicio', href: '/', icon: '🏠', exact: true },
+    { name: 'Catálogo', href: '/catalogo', icon: '🎵' },
+    { name: 'Planis', href: '/planis', icon: '📋' },
   ]
 
-  // Función para cerrar sesión
   const handleLogout = () => {
     Cookies.remove('coplitas_role')
     Cookies.remove('coplitas_user')
-    Cookies.remove('app_pin') // Por las dudas si quedó el viejo
+    Cookies.remove('app_pin')
     router.push('/login')
     router.refresh()
   }
-
-  // Obtenemos el nombre de usuario para mostrarlo (opcional pero queda lindo)
-  const username = Cookies.get('coplitas_user') || 'Usuario'
 
   return (
     <>
       {/* --- MENÚ LATERAL (DESKTOP) --- */}
       <aside className="hidden md:flex flex-col justify-between w-64 bg-white border-r min-h-screen fixed left-0 top-0 p-4 z-50">
-        
         <div>
           <div className="mb-8 p-2">
             <h2 className="text-xl font-bold text-purple-700">Coplitas App</h2>
@@ -45,8 +49,6 @@ export default function Navbar() {
 
           <nav className="flex flex-col gap-2">
             {navLinks.map((link) => {
-              // Si es "Inicio" (/), solo se activa si la ruta es EXACTAMENTE "/"
-              // Si son las otras, se activan si la ruta EMPieza con su href (ej: /catalogo/algo)
               const isActive = link.exact 
                 ? pathname === link.href 
                 : pathname.startsWith(link.href)
@@ -69,7 +71,6 @@ export default function Navbar() {
           </nav>
         </div>
 
-        {/* Botón Cerrar Sesión (Abajo de todo en Desktop) */}
         <div className="border-t pt-4">
           <button 
             onClick={handleLogout}
@@ -81,12 +82,14 @@ export default function Navbar() {
         </div>
       </aside>
 
-
-      {/* --- HEADER SUPERIOR (MOBILE) --- 
-          Acá agregamos el botón de salir para no saturar la barra de abajo
-      */}
+      {/* --- HEADER SUPERIOR (MOBILE) --- */}
       <div className="md:hidden fixed top-0 left-0 w-full bg-white/90 backdrop-blur border-b p-3 px-4 z-40 flex justify-between items-center shadow-sm">
-        <h2 className="font-bold text-purple-700">Coplitas</h2>
+        {/* ACÁ AGREGAMOS EL NOMBRE DEL USUARIO */}
+        <div className="flex items-baseline gap-2">
+          <h2 className="font-bold text-purple-700 text-lg">Coplitas</h2>
+          <span className="text-sm font-medium text-gray-500 capitalize">| {username}</span>
+        </div>
+
         <button 
           onClick={handleLogout}
           className="text-xs font-semibold text-red-600 bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 flex items-center gap-1"
@@ -94,7 +97,6 @@ export default function Navbar() {
           <span>🚪</span> Salir
         </button>
       </div>
-
 
       {/* --- BARRA INFERIOR (MOBILE) --- */}
       <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t flex justify-around p-2 pb-safe z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
@@ -122,11 +124,10 @@ export default function Navbar() {
         })}
       </nav>
       
-      {/* Como agregamos un header fijo en mobile, necesitamos empujar el contenido hacia abajo en el celular para que no quede tapado por el header */}
       <style jsx global>{`
         @media (max-width: 768px) {
           main {
-            padding-top: 60px; /* Compensa el header superior */
+            padding-top: 60px;
           }
         }
       `}</style>
