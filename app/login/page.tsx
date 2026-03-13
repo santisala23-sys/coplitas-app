@@ -49,7 +49,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <input
             type="text"
-            placeholder="Usuario (ej: mica)"
+            placeholder="Usuario"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             className="border p-3 rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 placeholder-gray-400 bg-gray-50"
