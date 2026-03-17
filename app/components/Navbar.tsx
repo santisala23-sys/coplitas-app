@@ -28,6 +28,7 @@ export default function Navbar() {
     { name: 'Catálogo', href: '/catalogo', icon: '🎵' },
     { name: 'Tareas', href: '/tareas', icon: '✅' },
     { name: 'Planis', href: '/planis', icon: '📋' },
+    { name: 'Inventario', href: '/inventario', icon: '📦' },
   ]
 
   const handleLogout = () => {
