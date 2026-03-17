@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import Cookies from 'js-cookie'
 
 export default function HomePage() {
-  const [stats, setStats] = useState({ canciones: 0, planis: 0, tareas: 0, sedes: 0 })
+  const [stats, setStats] = useState({ canciones: 0, planis: 0, tareas: 0, sedes: 0, materiales: 0 })
   const [loading, setLoading] = useState(true)
   const [userRole, setUserRole] = useState<string | null>(null)
 
@@ -18,6 +18,9 @@ export default function HomePage() {
       // Contadores globales
       const { count: cancionesCount } = await supabase.from('canciones').select('*', { count: 'exact', head: true })
       const { count: planisCount } = await supabase.from('planificaciones').select('*', { count: 'exact', head: true })
+      
+      // Contador de Materiales
+      const { count: materialesCount } = await supabase.from('materiales').select('*', { count: 'exact', head: true })
 
       // Contador de Sedes (solo nos importan las ACTIVAS para mostrar en la tarjeta)
       let sedesCount = 0
@@ -44,7 +47,8 @@ export default function HomePage() {
         canciones: cancionesCount || 0,
         planis: planisCount || 0,
         tareas: tareasCount,
-        sedes: sedesCount
+        sedes: sedesCount,
+        materiales: materialesCount || 0
       })
       setLoading(false)
     }
@@ -61,29 +65,11 @@ export default function HomePage() {
         <p className="text-lg md:text-xl text-gray-600">Panel de control de Coplitas.</p>
       </div>
 
-      {/* Grilla de Módulos Activos */}
+      {/* Grilla de Módulos Activos (Orden modificado) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
         
-        {/* Card Catálogo */}
-        <Link href="/catalogo" className="bg-white p-8 rounded-3xl shadow-sm border border-purple-100 hover:shadow-lg hover:border-purple-300 transition-all group flex flex-col items-center text-center">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Canciones</h2>
-          <p className="text-gray-500 mb-6 flex-grow">Gestioná las canciones, subí audios, letras y ajustá las etiquetas y anotaciones.</p>
-          <div className="bg-purple-100/50 w-full py-3 rounded-xl">
-            {loading ? ( <div className="flex justify-center"><div className="w-5 h-5 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin"></div></div> ) : ( <p className="text-purple-700 font-medium"><strong className="text-lg">{stats.canciones}</strong> canciones cargadas</p> )}
-          </div>
-        </Link>
-
-        {/* Card Planis */}
-        <Link href="/planis" className="bg-white p-8 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-lg hover:border-emerald-300 transition-all group flex flex-col items-center text-center">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Mis Planis</h2>
-          <p className="text-gray-500 mb-6 flex-grow">Armá y estructurá las rondas dejando notas de transición para la sesión.</p>
-          <div className="bg-emerald-100/50 w-full py-3 rounded-xl">
-            {loading ? ( <div className="flex justify-center"><div className="w-5 h-5 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin"></div></div> ) : ( <p className="text-emerald-700 font-medium"><strong className="text-lg">{stats.planis}</strong> planis armadas</p> )}
-          </div>
-        </Link>
-
-        {/* Card Tareas */}
-        <Link href="/tareas" className={`bg-white p-8 rounded-3xl shadow-sm border border-orange-100 hover:shadow-lg hover:border-orange-300 transition-all group flex flex-col items-center text-center ${userRole !== 'ADMIN' ? 'md:col-span-2' : ''}`}>
+        {/* 1. Tareas */}
+        <Link href="/tareas" className="bg-white p-8 rounded-3xl shadow-sm border border-orange-100 hover:shadow-lg hover:border-orange-300 transition-all group flex flex-col items-center text-center">
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Mis Tareas</h2>
           <p className="text-gray-500 mb-6 flex-grow">Gestión de pendientes, armado de bolsos y pedidos de materiales.</p>
           <div className={`${stats.tareas > 0 ? 'bg-orange-100' : 'bg-gray-100'} w-full py-3 rounded-xl transition-colors`}>
@@ -91,7 +77,16 @@ export default function HomePage() {
           </div>
         </Link>
 
-        {/* Card Sedes (Solo Admin) */}
+        {/* 2. Materiales (Inventario) */}
+        <Link href="/inventario" className="bg-white p-8 rounded-3xl shadow-sm border border-blue-100 hover:shadow-lg hover:border-blue-300 transition-all group flex flex-col items-center text-center">
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Materiales</h2>
+          <p className="text-gray-500 mb-6 flex-grow">Stock general, movimientos entre sedes e historial de bolsos.</p>
+          <div className="bg-blue-100/50 w-full py-3 rounded-xl">
+            {loading ? ( <div className="flex justify-center"><div className="w-5 h-5 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin"></div></div> ) : ( <p className="text-blue-700 font-medium"><strong className="text-lg">{stats.materiales}</strong> materiales en stock</p> )}
+          </div>
+        </Link>
+
+        {/* 3. Sedes (Solo Admin) */}
         {userRole === 'ADMIN' && (
           <Link href="/sedes" className="bg-white p-8 rounded-3xl shadow-sm border border-teal-100 hover:shadow-lg hover:border-teal-300 transition-all group flex flex-col items-center text-center">
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Sedes</h2>
@@ -102,9 +97,9 @@ export default function HomePage() {
           </Link>
         )}
 
-        {/* Card Equipo (Solo Admin) */}
+        {/* 4. Equipo (Solo Admin) */}
         {userRole === 'ADMIN' && (
-          <Link href="/usuarios" className="md:col-span-2 bg-white p-8 rounded-3xl shadow-sm border border-indigo-100 hover:shadow-lg hover:border-indigo-300 transition-all group flex flex-col items-center text-center">
+          <Link href="/usuarios" className="bg-white p-8 rounded-3xl shadow-sm border border-indigo-100 hover:shadow-lg hover:border-indigo-300 transition-all group flex flex-col items-center text-center">
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Equipo</h2>
             <p className="text-gray-500 mb-6 flex-grow">Gestión de usuarios, altas, bajas y contraseñas de la plataforma.</p>
             <div className="bg-indigo-100/50 w-full py-3 rounded-xl">
@@ -112,6 +107,24 @@ export default function HomePage() {
             </div>
           </Link>
         )}
+
+        {/* 5. Planis */}
+        <Link href="/planis" className="bg-white p-8 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-lg hover:border-emerald-300 transition-all group flex flex-col items-center text-center">
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Mis Planis</h2>
+          <p className="text-gray-500 mb-6 flex-grow">Armá y estructurá las rondas dejando notas de transición para la sesión.</p>
+          <div className="bg-emerald-100/50 w-full py-3 rounded-xl">
+            {loading ? ( <div className="flex justify-center"><div className="w-5 h-5 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin"></div></div> ) : ( <p className="text-emerald-700 font-medium"><strong className="text-lg">{stats.planis}</strong> planis armadas</p> )}
+          </div>
+        </Link>
+
+        {/* 6. Canciones */}
+        <Link href="/catalogo" className="bg-white p-8 rounded-3xl shadow-sm border border-purple-100 hover:shadow-lg hover:border-purple-300 transition-all group flex flex-col items-center text-center">
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Canciones</h2>
+          <p className="text-gray-500 mb-6 flex-grow">Gestioná las canciones, subí audios, letras y ajustá las etiquetas y anotaciones.</p>
+          <div className="bg-purple-100/50 w-full py-3 rounded-xl">
+            {loading ? ( <div className="flex justify-center"><div className="w-5 h-5 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin"></div></div> ) : ( <p className="text-purple-700 font-medium"><strong className="text-lg">{stats.canciones}</strong> canciones cargadas</p> )}
+          </div>
+        </Link>
 
       </div>
     </div>
