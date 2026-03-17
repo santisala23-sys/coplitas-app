@@ -66,7 +66,7 @@ export default function HomePage() {
         
         {/* Card Catálogo */}
         <Link href="/catalogo" className="bg-white p-8 rounded-3xl shadow-sm border border-purple-100 hover:shadow-lg hover:border-purple-300 transition-all group flex flex-col items-center text-center">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Catálogo</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Canciones</h2>
           <p className="text-gray-500 mb-6 flex-grow">Gestioná las canciones, subí audios, letras y ajustá las etiquetas y anotaciones.</p>
           <div className="bg-purple-100/50 w-full py-3 rounded-xl">
             {loading ? ( <div className="flex justify-center"><div className="w-5 h-5 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin"></div></div> ) : ( <p className="text-purple-700 font-medium"><strong className="text-lg">{stats.canciones}</strong> canciones cargadas</p> )}

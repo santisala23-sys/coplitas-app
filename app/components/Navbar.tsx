@@ -25,7 +25,7 @@ export default function Navbar() {
 
   const navLinks = [
     { name: 'Inicio', href: '/', icon: '🏠', exact: true },
-    { name: 'Catálogo', href: '/catalogo', icon: '🎵' },
+    { name: 'Canciones', href: '/catalogo', icon: '🎵' },
     { name: 'Tareas', href: '/tareas', icon: '✅' },
     { name: 'Planis', href: '/planis', icon: '📋' },
     { name: 'Inventario', href: '/inventario', icon: '📦' },
