@@ -26,6 +26,15 @@ export default function LoginPage() {
       .single()
 
     if (data && !dbError) {
+      
+      // Bloqueamos la entrada si el usuario está inactivo
+      if (data.activo === false) {
+        setError(true)
+        alert('Este usuario ha sido desactivado. Consultá con las administradoras.')
+        setLoading(false)
+        return
+      }
+
       // Guardamos el rol y el nombre para usarlos en el resto de la app
       Cookies.set('coplitas_role', data.role, { expires: 30 })
       Cookies.set('coplitas_user', data.username, { expires: 30 })
@@ -52,7 +61,7 @@ export default function LoginPage() {
             placeholder="Usuario"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="border p-3 rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 placeholder-gray-400 bg-gray-50"
+            className="border p-3 rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 placeholder-gray-400 bg-gray-50 lowercase"
             required
             autoFocus
           />

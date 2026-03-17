@@ -102,6 +102,17 @@ export default function HomePage() {
           </Link>
         )}
 
+        {/* Card Equipo (Solo Admin) */}
+        {userRole === 'ADMIN' && (
+          <Link href="/usuarios" className="md:col-span-2 bg-white p-8 rounded-3xl shadow-sm border border-indigo-100 hover:shadow-lg hover:border-indigo-300 transition-all group flex flex-col items-center text-center">
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Equipo</h2>
+            <p className="text-gray-500 mb-6 flex-grow">Gestión de usuarios, altas, bajas y contraseñas de la plataforma.</p>
+            <div className="bg-indigo-100/50 w-full py-3 rounded-xl">
+              <p className="text-indigo-700 font-medium">Control de accesos 👥</p>
+            </div>
+          </Link>
+        )}
+
       </div>
     </div>
   )
