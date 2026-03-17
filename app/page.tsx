@@ -70,8 +70,8 @@ export default function HomePage() {
         
         {/* 1. Tareas */}
         <Link href="/tareas" className="bg-white p-8 rounded-3xl shadow-sm border border-orange-100 hover:shadow-lg hover:border-orange-300 transition-all group flex flex-col items-center text-center">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Mis Tareas</h2>
-          <p className="text-gray-500 mb-6 flex-grow">Gestión de pendientes, armado de bolsos y pedidos de materiales.</p>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Tareas</h2>
+          <p className="text-gray-500 mb-6 flex-grow">Gestión de pendientes y pedidos de materiales.</p>
           <div className={`${stats.tareas > 0 ? 'bg-orange-100' : 'bg-gray-100'} w-full py-3 rounded-xl transition-colors`}>
             {loading ? ( <div className="flex justify-center"><div className="w-5 h-5 border-2 border-orange-300 border-t-orange-600 rounded-full animate-spin"></div></div> ) : ( <p className={`${stats.tareas > 0 ? 'text-orange-700' : 'text-gray-500'} font-medium`}>{stats.tareas > 0 ? ( <>Tenés <strong className="text-lg">{stats.tareas}</strong> pendiente(s)</> ) : ( <>Todo al día.</> )}</p> )}
           </div>
@@ -80,7 +80,7 @@ export default function HomePage() {
         {/* 2. Materiales (Inventario) */}
         <Link href="/inventario" className="bg-white p-8 rounded-3xl shadow-sm border border-blue-100 hover:shadow-lg hover:border-blue-300 transition-all group flex flex-col items-center text-center">
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Materiales</h2>
-          <p className="text-gray-500 mb-6 flex-grow">Stock general, movimientos entre sedes e historial de bolsos.</p>
+          <p className="text-gray-500 mb-6 flex-grow">Stock general y movimientos entre sedes.</p>
           <div className="bg-blue-100/50 w-full py-3 rounded-xl">
             {loading ? ( <div className="flex justify-center"><div className="w-5 h-5 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin"></div></div> ) : ( <p className="text-blue-700 font-medium"><strong className="text-lg">{stats.materiales}</strong> materiales en stock</p> )}
           </div>
@@ -110,7 +110,7 @@ export default function HomePage() {
 
         {/* 5. Planis */}
         <Link href="/planis" className="bg-white p-8 rounded-3xl shadow-sm border border-emerald-100 hover:shadow-lg hover:border-emerald-300 transition-all group flex flex-col items-center text-center">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Mis Planis</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Planis</h2>
           <p className="text-gray-500 mb-6 flex-grow">Armá y estructurá las rondas dejando notas de transición para la sesión.</p>
           <div className="bg-emerald-100/50 w-full py-3 rounded-xl">
             {loading ? ( <div className="flex justify-center"><div className="w-5 h-5 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin"></div></div> ) : ( <p className="text-emerald-700 font-medium"><strong className="text-lg">{stats.planis}</strong> planis armadas</p> )}
