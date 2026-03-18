@@ -22,6 +22,9 @@ export default function InventarioPage() {
   const [isSedeModalOpen, setIsSedeModalOpen] = useState(false)
   const [materialSeleccionado, setMaterialSeleccionado] = useState<any>(null)
   const [materialEditando, setMaterialEditando] = useState<any>(null)
+  
+  // Nuevo estado para manejar las ubicaciones durante la edición
+  const [ubicacionesEditando, setUbicacionesEditando] = useState<any[]>([])
 
   const [formMaterial, setFormMaterial] = useState({ nombre: '', cantidad_total: 1, descripcion: '', sede_base_id: '' })
   const [formSede, setFormSede] = useState({ nombre: '', direccion: '', estado: 'ACTIVA' })
@@ -62,7 +65,7 @@ export default function InventarioPage() {
       const ubicacionesReales = mat.material_ubicacion?.filter((u: any) => u.cantidad > 0) || []
       const cantUbicada = ubicacionesReales.reduce((acc: number, u: any) => acc + u.cantidad, 0)
       const cantSinUbicar = mat.cantidad_total - cantUbicada
-      return { ...mat, ubicaciones: ubicacionesReales, sin_ubicar: cantSinUbicar }
+      return { ...mat, ubicaciones: ubicacionesReales, sin_ubicar: cantSinUbicar > 0 ? cantSinUbicar : 0 }
     }) || []
     
     setMateriales(materialesProcesados)
@@ -82,52 +85,56 @@ export default function InventarioPage() {
     setIsSaving(true)
     
     if (materialEditando) {
-        const { error } = await supabase.from('materiales').update({
+        // 1. Actualizar datos base del material
+        const { error: errMat } = await supabase.from('materiales').update({
             nombre: formMaterial.nombre,
             cantidad_total: formMaterial.cantidad_total,
             descripcion: formMaterial.descripcion
         }).eq('id', materialEditando.id)
 
-        if (!error && formMaterial.sede_base_id) {
-             const { data: ubicacionesExistentes } = await supabase
-                 .from('material_ubicacion')
-                 .select('*')
-                 .eq('material_id', materialEditando.id)
-                 .eq('sede_id', formMaterial.sede_base_id)
+        if (!errMat) {
+            // 2. Actualizar las cantidades de las ubicaciones editadas
+            for (const ub of ubicacionesEditando) {
+                if (ub.cantidad === 0) {
+                     await supabase.from('material_ubicacion').delete().eq('id', ub.id)
+                } else {
+                     await supabase.from('material_ubicacion').update({ cantidad: ub.cantidad }).eq('id', ub.id)
+                }
+            }
 
-             if (ubicacionesExistentes && ubicacionesExistentes.length > 0) {
-                 // Update existing
-                  await supabase.from('material_ubicacion').update({
-                     cantidad: formMaterial.cantidad_total
-                 }).eq('id', ubicacionesExistentes[0].id)
-             } else {
-                 // Insert new
-                  await supabase.from('material_ubicacion').insert([{
-                     material_id: materialEditando.id,
-                     sede_id: formMaterial.sede_base_id,
-                     cantidad: formMaterial.cantidad_total
-                 }])
-             }
+            // 3. Registrar un movimiento de "Ajuste Manual" para el historial
+            await supabase.from('movimientos_material').insert([{
+              material_id: materialEditando.id,
+              usuario: currentUser,
+              cantidad: 0,
+              origen: 'Ajuste Manual',
+              destino: 'Inventario',
+              origen_tipo: 'SISTEMA',
+              destino_tipo: 'SISTEMA',
+              notas: 'Ajuste de inventario manual'
+            }])
         }
+
     } else {
         const { data: nuevoMat, error } = await supabase.from('materiales').insert([{
-        nombre: formMaterial.nombre,
-        cantidad_total: formMaterial.cantidad_total,
-        descripcion: formMaterial.descripcion
+            nombre: formMaterial.nombre,
+            cantidad_total: formMaterial.cantidad_total,
+            descripcion: formMaterial.descripcion
         }]).select().single()
 
         if (!error && nuevoMat && formMaterial.sede_base_id) {
-        await supabase.from('material_ubicacion').insert([{
-            material_id: nuevoMat.id,
-            sede_id: formMaterial.sede_base_id,
-            cantidad: formMaterial.cantidad_total
-        }])
+            await supabase.from('material_ubicacion').insert([{
+                material_id: nuevoMat.id,
+                sede_id: formMaterial.sede_base_id,
+                cantidad: formMaterial.cantidad_total
+            }])
         }
     }
 
     setFormMaterial({ nombre: '', cantidad_total: 1, descripcion: '', sede_base_id: '' })
     setIsMaterialModalOpen(false)
     setMaterialEditando(null)
+    setUbicacionesEditando([])
     setIsSaving(false)
     fetchData()
   }
@@ -151,7 +158,6 @@ export default function InventarioPage() {
     setIsSaving(false)
     fetchData()
   }
-
 
   const handleSaveMovimiento = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -207,6 +213,8 @@ export default function InventarioPage() {
 
   const handleEditarMaterial = (mat: any) => {
     setMaterialEditando(mat)
+    // Cargar las ubicaciones actuales en el estado temporal para editarlas
+    setUbicacionesEditando([...mat.ubicaciones])
     setFormMaterial({
         nombre: mat.nombre,
         cantidad_total: mat.cantidad_total,
@@ -218,8 +226,16 @@ export default function InventarioPage() {
 
   const handleNuevoMaterial = () => {
     setMaterialEditando(null)
+    setUbicacionesEditando([])
     setFormMaterial({ nombre: '', cantidad_total: 1, descripcion: '', sede_base_id: '' })
     setIsMaterialModalOpen(true)
+  }
+
+  // Actualiza la cantidad de una ubicación específica en el estado temporal
+  const updateUbicacionCantidad = (id: string, newCantidad: number) => {
+      setUbicacionesEditando(prev => 
+          prev.map(ub => ub.id === id ? { ...ub, cantidad: newCantidad } : ub)
+      )
   }
 
   const formatearFechaHora = (fechaStr: string) => new Date(fechaStr).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit' })
@@ -349,8 +365,12 @@ export default function InventarioPage() {
             <div className="p-5 border-b flex justify-between items-center"><h2 className="text-xl font-bold text-blue-900">{materialEditando ? 'Editar Material' : 'Nuevo Material'}</h2><button onClick={() => setIsMaterialModalOpen(false)} className="text-gray-400 hover:bg-gray-100 rounded-full font-bold text-xl w-10 h-10 flex justify-center items-center">✕</button></div>
             <form onSubmit={handleSaveMaterial} className="p-6 flex flex-col gap-4 overflow-y-auto">
               <div><label className="text-sm font-semibold text-gray-700">Nombre del recurso *</label><input required value={formMaterial.nombre} onChange={e => setFormMaterial({...formMaterial, nombre: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+              
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-sm font-semibold text-gray-700">Cantidad Total *</label><input required type="number" min="1" value={formMaterial.cantidad_total} onChange={e => setFormMaterial({...formMaterial, cantidad_total: parseInt(e.target.value)})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 text-lg font-bold focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                <div><label className="text-sm font-semibold text-gray-700">Cantidad Total *</label><input required type="number" min="0" value={formMaterial.cantidad_total} onChange={e => setFormMaterial({...formMaterial, cantidad_total: parseInt(e.target.value)})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 text-lg font-bold focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                
+                {/* Selector de Sede Inicial Oculto si estamos Editando */}
+                {!materialEditando && (
                 <div className="flex flex-col">
                   <label className="text-sm font-semibold text-gray-700">Sede Inicial</label>
                   <div className="flex gap-2">
@@ -358,14 +378,42 @@ export default function InventarioPage() {
                       <option value="">Sin ubicar (En tránsito)</option>
                       {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                     </select>
-                    {!materialEditando && (
-                        <button type="button" onClick={() => setIsSedeModalOpen(true)} className="mt-1 bg-teal-100 text-teal-700 p-3 rounded-xl border border-teal-200 hover:bg-teal-200 font-bold flex-shrink-0" title="Crear nueva sede">+</button>
-                    )}
+                    <button type="button" onClick={() => setIsSedeModalOpen(true)} className="mt-1 bg-teal-100 text-teal-700 p-3 rounded-xl border border-teal-200 hover:bg-teal-200 font-bold flex-shrink-0" title="Crear nueva sede">+</button>
                   </div>
                 </div>
+                )}
               </div>
+
               <div><label className="text-sm font-semibold text-gray-700">Aclaraciones</label><input value={formMaterial.descripcion} onChange={e => setFormMaterial({...formMaterial, descripcion: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
-              <div className="mt-4 flex gap-3 pt-2 border-t"><button type="button" onClick={() => setIsMaterialModalOpen(false)} className="w-1/3 py-3 rounded-xl font-medium text-gray-600 bg-gray-100 hover:bg-gray-200">Cancelar</button><button type="submit" disabled={isSaving || !formMaterial.nombre} className="w-2/3 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">Guardar</button></div>
+              
+              {/* Sección de Ajuste Manual (Solo visible al editar) */}
+              {materialEditando && ubicacionesEditando.length > 0 && (
+                  <div className="mt-2 border-t pt-4">
+                      <label className="text-sm font-bold text-gray-700 mb-2 block">Ajuste Manual de Ubicaciones</label>
+                      <p className="text-xs text-gray-500 mb-3">Si los números no cuadran, corregilos acá. Si pones 0, se elimina de esa ubicación.</p>
+                      <div className="flex flex-col gap-2">
+                          {ubicacionesEditando.map((ub) => (
+                              <div key={ub.id} className="flex items-center justify-between bg-gray-50 p-2 rounded-xl border border-gray-200">
+                                  <span className="text-sm font-medium text-gray-700">
+                                     {ub.sede_id && '📍 '}
+                                     {ub.evento_id && '🎉 '}
+                                     {ub.usuario_username && '👤 '}
+                                     {ub.sede?.nombre || ub.evento?.titulo || <span className="capitalize">{ub.usuario_username}</span>}
+                                  </span>
+                                  <input 
+                                    type="number" 
+                                    min="0"
+                                    value={ub.cantidad} 
+                                    onChange={(e) => updateUbicacionCantidad(ub.id, parseInt(e.target.value) || 0)}
+                                    className="w-20 p-2 text-center border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-800"
+                                  />
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              )}
+
+              <div className="mt-4 flex gap-3 pt-4 border-t"><button type="button" onClick={() => setIsMaterialModalOpen(false)} className="w-1/3 py-3 rounded-xl font-medium text-gray-600 bg-gray-100 hover:bg-gray-200">Cancelar</button><button type="submit" disabled={isSaving || !formMaterial.nombre} className="w-2/3 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">Guardar</button></div>
             </form>
           </div>
         </div>
