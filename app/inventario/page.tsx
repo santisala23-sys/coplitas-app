@@ -1,4 +1,3 @@
-// app/inventario/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -22,6 +21,7 @@ export default function InventarioPage() {
   const [isMovimientoModalOpen, setIsMovimientoModalOpen] = useState(false)
   const [isSedeModalOpen, setIsSedeModalOpen] = useState(false)
   const [materialSeleccionado, setMaterialSeleccionado] = useState<any>(null)
+  const [materialEditando, setMaterialEditando] = useState<any>(null)
 
   const [formMaterial, setFormMaterial] = useState({ nombre: '', cantidad_total: 1, descripcion: '', sede_base_id: '' })
   const [formSede, setFormSede] = useState({ nombre: '', direccion: '', estado: 'ACTIVA' })
@@ -81,22 +81,53 @@ export default function InventarioPage() {
     e.preventDefault()
     setIsSaving(true)
     
-    const { data: nuevoMat, error } = await supabase.from('materiales').insert([{
-      nombre: formMaterial.nombre,
-      cantidad_total: formMaterial.cantidad_total,
-      descripcion: formMaterial.descripcion
-    }]).select().single()
+    if (materialEditando) {
+        const { error } = await supabase.from('materiales').update({
+            nombre: formMaterial.nombre,
+            cantidad_total: formMaterial.cantidad_total,
+            descripcion: formMaterial.descripcion
+        }).eq('id', materialEditando.id)
 
-    if (!error && nuevoMat && formMaterial.sede_base_id) {
-      await supabase.from('material_ubicacion').insert([{
-        material_id: nuevoMat.id,
-        sede_id: formMaterial.sede_base_id,
-        cantidad: formMaterial.cantidad_total
-      }])
+        if (!error && formMaterial.sede_base_id) {
+             const { data: ubicacionesExistentes } = await supabase
+                 .from('material_ubicacion')
+                 .select('*')
+                 .eq('material_id', materialEditando.id)
+                 .eq('sede_id', formMaterial.sede_base_id)
+
+             if (ubicacionesExistentes && ubicacionesExistentes.length > 0) {
+                 // Update existing
+                  await supabase.from('material_ubicacion').update({
+                     cantidad: formMaterial.cantidad_total
+                 }).eq('id', ubicacionesExistentes[0].id)
+             } else {
+                 // Insert new
+                  await supabase.from('material_ubicacion').insert([{
+                     material_id: materialEditando.id,
+                     sede_id: formMaterial.sede_base_id,
+                     cantidad: formMaterial.cantidad_total
+                 }])
+             }
+        }
+    } else {
+        const { data: nuevoMat, error } = await supabase.from('materiales').insert([{
+        nombre: formMaterial.nombre,
+        cantidad_total: formMaterial.cantidad_total,
+        descripcion: formMaterial.descripcion
+        }]).select().single()
+
+        if (!error && nuevoMat && formMaterial.sede_base_id) {
+        await supabase.from('material_ubicacion').insert([{
+            material_id: nuevoMat.id,
+            sede_id: formMaterial.sede_base_id,
+            cantidad: formMaterial.cantidad_total
+        }])
+        }
     }
 
     setFormMaterial({ nombre: '', cantidad_total: 1, descripcion: '', sede_base_id: '' })
     setIsMaterialModalOpen(false)
+    setMaterialEditando(null)
     setIsSaving(false)
     fetchData()
   }
@@ -174,6 +205,23 @@ export default function InventarioPage() {
     setActiveTab('historial')
   }
 
+  const handleEditarMaterial = (mat: any) => {
+    setMaterialEditando(mat)
+    setFormMaterial({
+        nombre: mat.nombre,
+        cantidad_total: mat.cantidad_total,
+        descripcion: mat.descripcion || '',
+        sede_base_id: '' 
+    })
+    setIsMaterialModalOpen(true)
+  }
+
+  const handleNuevoMaterial = () => {
+    setMaterialEditando(null)
+    setFormMaterial({ nombre: '', cantidad_total: 1, descripcion: '', sede_base_id: '' })
+    setIsMaterialModalOpen(true)
+  }
+
   const formatearFechaHora = (fechaStr: string) => new Date(fechaStr).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit' })
 
   const abrirModalMover = (mat: any) => {
@@ -200,7 +248,7 @@ export default function InventarioPage() {
         </div>
         
         {userRole === 'ADMIN' && activeTab === 'stock' && (
-          <button onClick={() => setIsMaterialModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold shadow-sm transition w-full md:w-auto">+ Nuevo Material</button>
+          <button onClick={handleNuevoMaterial} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold shadow-sm transition w-full md:w-auto">+ Nuevo Material</button>
         )}
       </div>
 
@@ -214,9 +262,18 @@ export default function InventarioPage() {
           {activeTab === 'stock' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
               {materiales.map((mat) => (
-                <div key={mat.id} className="bg-white p-5 rounded-3xl shadow-sm border border-blue-100 flex flex-col justify-between">
+                <div key={mat.id} className="bg-white p-5 rounded-3xl shadow-sm border border-blue-100 flex flex-col justify-between relative group">
+                   {userRole === 'ADMIN' && (
+                    <button 
+                        onClick={() => handleEditarMaterial(mat)}
+                        className="absolute top-4 right-4 text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition"
+                        title="Editar Material"
+                    >
+                        ✏️
+                    </button>
+                   )}
                   <div>
-                    <div className="flex justify-between items-start mb-4">
+                    <div className="flex justify-between items-start mb-4 pr-10">
                       <div>
                         <h2 className="text-2xl font-bold text-gray-800 leading-tight">{mat.nombre}</h2>
                         {mat.descripcion && <p className="text-sm text-gray-500 mt-1">{mat.descripcion}</p>}
@@ -285,11 +342,11 @@ export default function InventarioPage() {
 
       {/* --- MODALES --- */}
 
-       {/* MODAL NUEVO MATERIAL */}
+       {/* MODAL NUEVO/EDITAR MATERIAL */}
        {isMaterialModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-5 border-b flex justify-between items-center"><h2 className="text-xl font-bold text-blue-900">Nuevo Material</h2><button onClick={() => setIsMaterialModalOpen(false)} className="text-gray-400 hover:bg-gray-100 rounded-full font-bold text-xl w-10 h-10 flex justify-center items-center">✕</button></div>
+            <div className="p-5 border-b flex justify-between items-center"><h2 className="text-xl font-bold text-blue-900">{materialEditando ? 'Editar Material' : 'Nuevo Material'}</h2><button onClick={() => setIsMaterialModalOpen(false)} className="text-gray-400 hover:bg-gray-100 rounded-full font-bold text-xl w-10 h-10 flex justify-center items-center">✕</button></div>
             <form onSubmit={handleSaveMaterial} className="p-6 flex flex-col gap-4 overflow-y-auto">
               <div><label className="text-sm font-semibold text-gray-700">Nombre del recurso *</label><input required value={formMaterial.nombre} onChange={e => setFormMaterial({...formMaterial, nombre: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
               <div className="grid grid-cols-2 gap-3">
@@ -301,7 +358,9 @@ export default function InventarioPage() {
                       <option value="">Sin ubicar (En tránsito)</option>
                       {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                     </select>
-                    <button type="button" onClick={() => setIsSedeModalOpen(true)} className="mt-1 bg-teal-100 text-teal-700 p-3 rounded-xl border border-teal-200 hover:bg-teal-200 font-bold flex-shrink-0" title="Crear nueva sede">+</button>
+                    {!materialEditando && (
+                        <button type="button" onClick={() => setIsSedeModalOpen(true)} className="mt-1 bg-teal-100 text-teal-700 p-3 rounded-xl border border-teal-200 hover:bg-teal-200 font-bold flex-shrink-0" title="Crear nueva sede">+</button>
+                    )}
                   </div>
                 </div>
               </div>
