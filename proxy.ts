@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-export function middleware(request: NextRequest) {
+// Solo cambiamos la palabra "middleware" por "proxy" en esta línea
+export function proxy(request: NextRequest) {
   // Leemos la nueva "credencial" (la cookie del rol que creamos en el login)
   const userRole = request.cookies.get('coplitas_role')?.value
 
