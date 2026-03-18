@@ -80,7 +80,7 @@ export default function HomePage() {
         {/* NUEVO: Eventos */}
         <Link href="/eventos" className="bg-white p-8 rounded-3xl shadow-sm border border-rose-100 hover:shadow-lg hover:border-rose-300 transition-all group flex flex-col items-center text-center">
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Eventos</h2>
-          <p className="text-gray-500 mb-6 flex-grow">Cumpleaños, talleres y rondas esporádicas. Asignaciones y bolsos.</p>
+          <p className="text-gray-500 mb-6 flex-grow">Cumpleaños, talleres y rondas esporádicas. Asignaciones y materiales.</p>
           <div className="bg-rose-100/50 w-full py-3 rounded-xl">
             {loading ? ( <div className="flex justify-center"><div className="w-5 h-5 border-2 border-rose-300 border-t-rose-600 rounded-full animate-spin"></div></div> ) : ( <p className="text-rose-700 font-medium"><strong className="text-lg">{stats.eventos}</strong> próximos eventos</p> )}
           </div>
