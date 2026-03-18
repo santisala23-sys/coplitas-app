@@ -180,7 +180,7 @@ export default function UsuariosPage() {
                   value={formUsuario.username} 
                   onChange={e => setFormUsuario({...formUsuario, username: e.target.value})} 
                   className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-purple-500 outline-none disabled:opacity-50 lowercase" 
-                  placeholder="Ej: jachu" 
+                  placeholder="Ej: Mica" 
                 />
               </div>
 
@@ -203,7 +203,7 @@ export default function UsuariosPage() {
                   value={formUsuario.puesto} 
                   onChange={e => setFormUsuario({...formUsuario, puesto: e.target.value})} 
                   className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-purple-500 outline-none" 
-                  placeholder="Ej: Community Manager" 
+                  placeholder="Ej: Copliter" 
                 />
               </div>
 
