@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import Cookies from 'js-cookie'
 
 export default function HomePage() {
-  const [stats, setStats] = useState({ canciones: 0, planis: 0, tareas: 0, sedes: 0, materiales: 0 })
+  const [stats, setStats] = useState({ canciones: 0, planis: 0, tareas: 0, sedes: 0, materiales: 0, eventos: 0 })
   const [loading, setLoading] = useState(true)
   const [userRole, setUserRole] = useState<string | null>(null)
 
@@ -18,9 +18,8 @@ export default function HomePage() {
       // Contadores globales
       const { count: cancionesCount } = await supabase.from('canciones').select('*', { count: 'exact', head: true })
       const { count: planisCount } = await supabase.from('planificaciones').select('*', { count: 'exact', head: true })
-      
-      // Contador de Materiales
       const { count: materialesCount } = await supabase.from('materiales').select('*', { count: 'exact', head: true })
+      const { count: eventosCount } = await supabase.from('eventos').select('*', { count: 'exact', head: true }).eq('estado', 'PENDIENTE')
 
       // Contador de Sedes (solo nos importan las ACTIVAS para mostrar en la tarjeta)
       let sedesCount = 0
@@ -48,7 +47,8 @@ export default function HomePage() {
         planis: planisCount || 0,
         tareas: tareasCount,
         sedes: sedesCount,
-        materiales: materialesCount || 0
+        materiales: materialesCount || 0,
+        eventos: eventosCount || 0
       })
       setLoading(false)
     }
@@ -65,7 +65,7 @@ export default function HomePage() {
         <p className="text-lg md:text-xl text-gray-600">Panel de control de Coplitas.</p>
       </div>
 
-      {/* Grilla de Módulos Activos (Orden modificado) */}
+      {/* Grilla de Módulos Activos */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
         
         {/* 1. Tareas */}
@@ -74,6 +74,15 @@ export default function HomePage() {
           <p className="text-gray-500 mb-6 flex-grow">Gestión de pendientes y pedidos de materiales.</p>
           <div className={`${stats.tareas > 0 ? 'bg-orange-100' : 'bg-gray-100'} w-full py-3 rounded-xl transition-colors`}>
             {loading ? ( <div className="flex justify-center"><div className="w-5 h-5 border-2 border-orange-300 border-t-orange-600 rounded-full animate-spin"></div></div> ) : ( <p className={`${stats.tareas > 0 ? 'text-orange-700' : 'text-gray-500'} font-medium`}>{stats.tareas > 0 ? ( <>Tenés <strong className="text-lg">{stats.tareas}</strong> pendiente(s)</> ) : ( <>Todo al día.</> )}</p> )}
+          </div>
+        </Link>
+
+        {/* NUEVO: Eventos */}
+        <Link href="/eventos" className="bg-white p-8 rounded-3xl shadow-sm border border-rose-100 hover:shadow-lg hover:border-rose-300 transition-all group flex flex-col items-center text-center">
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Eventos</h2>
+          <p className="text-gray-500 mb-6 flex-grow">Cumpleaños, talleres y rondas esporádicas. Asignaciones y bolsos.</p>
+          <div className="bg-rose-100/50 w-full py-3 rounded-xl">
+            {loading ? ( <div className="flex justify-center"><div className="w-5 h-5 border-2 border-rose-300 border-t-rose-600 rounded-full animate-spin"></div></div> ) : ( <p className="text-rose-700 font-medium"><strong className="text-lg">{stats.eventos}</strong> próximos eventos</p> )}
           </div>
         </Link>
 
