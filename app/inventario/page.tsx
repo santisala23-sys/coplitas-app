@@ -10,6 +10,7 @@ export default function InventarioPage() {
   const [materiales, setMateriales] = useState<any[]>([])
   const [movimientos, setMovimientos] = useState<any[]>([])
   const [sedes, setSedes] = useState<any[]>([])
+  const [usuarios, setUsuarios] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   
   const [userRole, setUserRole] = useState<string | null>(null)
@@ -18,12 +19,16 @@ export default function InventarioPage() {
   // Estados para Modales
   const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false)
   const [isMovimientoModalOpen, setIsMovimientoModalOpen] = useState(false)
-  
   const [materialSeleccionado, setMaterialSeleccionado] = useState<any>(null)
 
   // Formularios
-  const [formMaterial, setFormMaterial] = useState({ nombre: '', cantidad_total: 1, descripcion: '', sede_id: '' })
-  const [formMovimiento, setFormMovimiento] = useState({ cantidad: 1, origen: '', destino: '', notas: '' })
+  const [formMaterial, setFormMaterial] = useState({ nombre: '', cantidad_total: 1, descripcion: '', sede_base_id: '' })
+  const [formMovimiento, setFormMovimiento] = useState({ 
+    cantidad: 1, 
+    origen_tipo: 'SEDE', origen_id: '', 
+    destino_tipo: 'USUARIO', destino_id: '', 
+    notas: '' 
+  })
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
@@ -37,16 +42,29 @@ export default function InventarioPage() {
   const fetchData = async () => {
     setLoading(true)
     
-    // Traer Sedes activas (para el modal de cargar material)
-    const { data: dataSedes } = await supabase.from('sedes').select('*').eq('estado', 'ACTIVA').order('nombre')
+    // Traer Sedes y Usuarios activos para los selectores de movimiento
+    const [{ data: dataSedes }, { data: dataUsuarios }] = await Promise.all([
+      supabase.from('sedes').select('*').eq('estado', 'ACTIVA').order('nombre'),
+      supabase.from('usuarios').select('username').eq('activo', true).order('username')
+    ])
     if (dataSedes) setSedes(dataSedes)
+    if (dataUsuarios) setUsuarios(dataUsuarios)
 
-    // Traer Materiales
+    // Traer Materiales CON sus ubicaciones actuales
     const { data: dataMateriales } = await supabase
       .from('materiales')
-      .select('*, sede:sedes(nombre)')
+      .select('*, material_ubicacion(*, sede:sedes(nombre))')
       .order('nombre')
-    if (dataMateriales) setMateriales(dataMateriales)
+    
+    // Filtramos para no mostrar ubicaciones con 0 cantidad y calculamos el stock "perdido" o sin ubicar
+    const materialesProcesados = dataMateriales?.map(mat => {
+      const ubicacionesReales = mat.material_ubicacion?.filter((u: any) => u.cantidad > 0) || []
+      const cantUbicada = ubicacionesReales.reduce((acc: number, u: any) => acc + u.cantidad, 0)
+      const cantSinUbicar = mat.cantidad_total - cantUbicada
+      return { ...mat, ubicaciones: ubicacionesReales, sin_ubicar: cantSinUbicar }
+    }) || []
+    
+    setMateriales(materialesProcesados)
 
     // Traer Historial
     const { data: dataMovimientos } = await supabase
@@ -59,18 +77,28 @@ export default function InventarioPage() {
     setLoading(false)
   }
 
-  // --- CRUD MATERIALES ---
+  // --- NUEVO MATERIAL ---
   const handleSaveMaterial = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
-    const payload = {
+    
+    // 1. Creamos el material
+    const { data: nuevoMat, error } = await supabase.from('materiales').insert([{
       nombre: formMaterial.nombre,
       cantidad_total: formMaterial.cantidad_total,
-      descripcion: formMaterial.descripcion,
-      sede_id: formMaterial.sede_id || null
+      descripcion: formMaterial.descripcion
+    }]).select().single()
+
+    if (!error && nuevoMat && formMaterial.sede_base_id) {
+      // 2. Si eligió una sede base, le asignamos todo el stock inicial a esa sede
+      await supabase.from('material_ubicacion').insert([{
+        material_id: nuevoMat.id,
+        sede_id: formMaterial.sede_base_id,
+        cantidad: formMaterial.cantidad_total
+      }])
     }
-    await supabase.from('materiales').insert([payload])
-    setFormMaterial({ nombre: '', cantidad_total: 1, descripcion: '', sede_id: '' })
+
+    setFormMaterial({ nombre: '', cantidad_total: 1, descripcion: '', sede_base_id: '' })
     setIsMaterialModalOpen(false)
     setIsSaving(false)
     fetchData()
@@ -80,77 +108,169 @@ export default function InventarioPage() {
   const handleSaveMovimiento = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
+    
+    const matId = materialSeleccionado.id
+    const qty = formMovimiento.cantidad
+
+    // Lógica compleja de Base de Datos para sumar y restar:
+    
+    // 1. Restar del origen (Solo si el origen NO es "Sin Ubicar")
+    if (formMovimiento.origen_id !== 'SIN_UBICAR') {
+      const colOrigen = formMovimiento.origen_tipo === 'SEDE' ? 'sede_id' : 'usuario_username'
+      
+      const { data: ubOrigen } = await supabase.from('material_ubicacion')
+        .select('*').eq('material_id', matId).eq(colOrigen, formMovimiento.origen_id).single()
+      
+      if (ubOrigen) {
+        await supabase.from('material_ubicacion').update({ cantidad: ubOrigen.cantidad - qty }).eq('id', ubOrigen.id)
+      }
+    }
+
+    // 2. Sumar al destino
+    const colDestino = formMovimiento.destino_tipo === 'SEDE' ? 'sede_id' : 'usuario_username'
+    const { data: ubDestino } = await supabase.from('material_ubicacion')
+      .select('*').eq('material_id', matId).eq(colDestino, formMovimiento.destino_id).single()
+
+    if (ubDestino) {
+      await supabase.from('material_ubicacion').update({ cantidad: ubDestino.cantidad + qty }).eq('id', ubDestino.id)
+    } else {
+      const nuevoDestino = { material_id: matId, cantidad: qty } as any
+      nuevoDestino[colDestino] = formMovimiento.destino_id
+      await supabase.from('material_ubicacion').insert([nuevoDestino])
+    }
+
+    // 3. Registrar el historial para auditoría
+    let nombreOrigen = formMovimiento.origen_id === 'SIN_UBICAR' ? 'Stock sin ubicar' : formMovimiento.origen_id
+    if (formMovimiento.origen_tipo === 'SEDE' && formMovimiento.origen_id !== 'SIN_UBICAR') {
+      nombreOrigen = sedes.find(s => s.id === formMovimiento.origen_id)?.nombre || nombreOrigen
+    }
+    
+    let nombreDestino = formMovimiento.destino_id
+    if (formMovimiento.destino_tipo === 'SEDE') {
+      nombreDestino = sedes.find(s => s.id === formMovimiento.destino_id)?.nombre || nombreDestino
+    }
+
     await supabase.from('movimientos_material').insert([{
-      material_id: materialSeleccionado.id,
+      material_id: matId,
       usuario: currentUser,
-      cantidad: formMovimiento.cantidad,
-      origen: formMovimiento.origen,
-      destino: formMovimiento.destino,
+      cantidad: qty,
+      origen: nombreOrigen,
+      destino: nombreDestino,
+      origen_tipo: formMovimiento.origen_tipo, origen_id: formMovimiento.origen_id,
+      destino_tipo: formMovimiento.destino_tipo, destino_id: formMovimiento.destino_id,
       notas: formMovimiento.notas
     }])
-    setFormMovimiento({ cantidad: 1, origen: '', destino: '', notas: '' })
+
     setIsMovimientoModalOpen(false)
     setIsSaving(false)
     fetchData()
     setActiveTab('historial')
   }
 
+  // Helpers
   const formatearFechaHora = (fechaStr: string) => {
     return new Date(fechaStr).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit' })
+  }
+
+  const abrirModalMover = (mat: any) => {
+    setMaterialSeleccionado(mat)
+    // Pre-seleccionar el primer origen disponible (la ubicación que tenga más stock)
+    let mejorOrigen = { tipo: 'SEDE', id: 'SIN_UBICAR', max: mat.sin_ubicar }
+    
+    mat.ubicaciones.forEach((u: any) => {
+      if (u.cantidad > mejorOrigen.max) {
+        mejorOrigen = { tipo: u.sede_id ? 'SEDE' : 'USUARIO', id: u.sede_id || u.usuario_username, max: u.cantidad }
+      }
+    })
+
+    setFormMovimiento({
+      cantidad: 1,
+      origen_tipo: mejorOrigen.tipo, origen_id: mejorOrigen.id,
+      destino_tipo: 'USUARIO', destino_id: currentUser || '',
+      notas: ''
+    })
+    setIsMovimientoModalOpen(true)
   }
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto min-h-screen">
       
-      {/* CABECERA */}
       <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b pb-4">
         <div>
-          <h1 className="text-3xl font-bold mb-1 text-gray-800">Inventario</h1>
-          <p className="text-gray-600">Gestión de materiales</p>
+          <h1 className="text-3xl font-bold mb-1 text-gray-800">Materiales</h1>
+          <p className="text-gray-600">Control de stock e inventario dinámico</p>
         </div>
         
         {userRole === 'ADMIN' && activeTab === 'stock' && (
-          <button onClick={() => setIsMaterialModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold shadow-sm transition w-full md:w-auto">+ Cargar Material</button>
+          <button onClick={() => setIsMaterialModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold shadow-sm transition w-full md:w-auto">
+            + Nuevo Material
+          </button>
         )}
       </div>
 
-      {/* TABS NAVEGACIÓN */}
       <div className="flex gap-4 md:gap-8 mb-8 border-b-2 border-gray-200 overflow-x-auto whitespace-nowrap pb-1">
-        <button className={`pb-3 text-lg font-bold px-2 ${activeTab === 'stock' ? 'text-blue-600 border-b-4 border-blue-600 -mb-0.5' : 'text-gray-400 hover:text-gray-600'}`} onClick={() => setActiveTab('stock')}>Stock General</button>
-        <button className={`pb-3 text-lg font-bold px-2 ${activeTab === 'historial' ? 'text-blue-600 border-b-4 border-blue-600 -mb-0.5' : 'text-gray-400 hover:text-gray-600'}`} onClick={() => setActiveTab('historial')}>Historial</button>
+        <button className={`pb-3 text-lg font-bold px-2 ${activeTab === 'stock' ? 'text-blue-600 border-b-4 border-blue-600 -mb-0.5' : 'text-gray-400 hover:text-gray-600'}`} onClick={() => setActiveTab('stock')}>Estado del Stock</button>
+        <button className={`pb-3 text-lg font-bold px-2 ${activeTab === 'historial' ? 'text-blue-600 border-b-4 border-blue-600 -mb-0.5' : 'text-gray-400 hover:text-gray-600'}`} onClick={() => setActiveTab('historial')}>Últimos Movimientos</button>
       </div>
 
       {loading ? (
         <div className="text-center py-10 text-gray-500">Cargando datos...</div>
       ) : (
         <>
+          {/* ========================================== */}
+          {/* VISTA 1: STOCK Y UBICACIONES               */}
+          {/* ========================================== */}
           {activeTab === 'stock' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
               {materiales.map((mat) => (
-                <div key={mat.id} className="bg-white p-5 rounded-2xl shadow-sm border border-blue-100 flex flex-col justify-between">
+                <div key={mat.id} className="bg-white p-5 rounded-3xl shadow-sm border border-blue-100 flex flex-col justify-between">
                   <div>
-                    <div className="flex justify-between items-start mb-2">
-                      <h2 className="text-xl font-bold text-gray-800 pr-2">{mat.nombre}</h2>
-                      <span className="bg-blue-50 text-blue-700 font-bold px-3 py-1 rounded-lg shrink-0">Total: {mat.cantidad_total}</span>
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-800 leading-tight">{mat.nombre}</h2>
+                        {mat.descripcion && <p className="text-sm text-gray-500 mt-1">{mat.descripcion}</p>}
+                      </div>
+                      <div className="bg-blue-50 text-blue-700 font-black px-4 py-2 rounded-xl shrink-0 text-lg flex flex-col items-center border border-blue-100">
+                        <span className="text-[10px] uppercase tracking-wider opacity-70 mb-[-4px]">Total</span>
+                        {mat.cantidad_total}
+                      </div>
                     </div>
-                    {mat.sede?.nombre ? (
-                      <span className="inline-block bg-teal-50 text-teal-700 text-xs font-bold px-2 py-1 rounded mb-3">📍 {mat.sede.nombre}</span>
-                    ) : (
-                      <span className="inline-block bg-gray-100 text-gray-500 text-xs font-bold px-2 py-1 rounded mb-3">📍 Sin sede asignada</span>
-                    )}
                     
-                    {mat.descripcion && <p className="text-sm text-gray-500 mb-4">{mat.descripcion}</p>}
+                    {/* LISTA DE DÓNDE ESTÁN LAS COSAS */}
+                    <div className="bg-gray-50 rounded-2xl p-4 mb-4 border border-gray-100">
+                      <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">¿Dónde están hoy?</h3>
+                      <ul className="flex flex-col gap-2">
+                        {mat.ubicaciones.map((ub: any) => (
+                          <li key={ub.id} className="flex justify-between items-center text-sm font-medium">
+                            <span className="flex items-center gap-2 text-gray-700">
+                              {ub.sede_id ? <span className="bg-teal-100 text-teal-700 p-1 rounded-md">📍</span> : <span className="bg-purple-100 text-purple-700 p-1 rounded-md">👤</span>}
+                              {ub.sede?.nombre || <span className="capitalize">{ub.usuario_username}</span>}
+                            </span>
+                            <span className="bg-white px-3 py-1 rounded-lg border border-gray-200 font-bold">{ub.cantidad}</span>
+                          </li>
+                        ))}
+                        {mat.sin_ubicar > 0 && (
+                          <li className="flex justify-between items-center text-sm font-medium opacity-60">
+                            <span className="flex items-center gap-2 text-gray-500"><span className="bg-gray-200 p-1 rounded-md">❓</span> Sin ubicación</span>
+                            <span className="bg-gray-200 px-3 py-1 rounded-lg font-bold">{mat.sin_ubicar}</span>
+                          </li>
+                        )}
+                      </ul>
+                    </div>
                   </div>
                   
-                  <button onClick={() => { setMaterialSeleccionado(mat); setFormMovimiento({...formMovimiento, origen: mat.sede?.nombre || 'Depósito'}); setIsMovimientoModalOpen(true); }} className="mt-4 w-full bg-blue-50 text-blue-700 font-semibold py-2.5 rounded-xl border border-blue-200 hover:bg-blue-100 transition">
-                    Mover Material 📦
+                  <button onClick={() => abrirModalMover(mat)} className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 transition shadow-sm flex items-center justify-center gap-2">
+                    <span>📦</span> Mover Material
                   </button>
                 </div>
               ))}
-              {materiales.length === 0 && <p className="text-gray-500 col-span-2 text-center py-10">No hay materiales cargados.</p>}
+              {materiales.length === 0 && <p className="text-gray-500 col-span-2 text-center py-10">No hay materiales cargados en el inventario.</p>}
             </div>
           )}
 
+          {/* ========================================== */}
+          {/* VISTA 2: HISTORIAL                         */}
+          {/* ========================================== */}
           {activeTab === 'historial' && (
             <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-gray-300 before:to-transparent">
               {movimientos.map((mov) => (
@@ -161,11 +281,15 @@ export default function InventarioPage() {
                       <span className="font-bold text-gray-800 capitalize">{mov.usuario}</span>
                       <time className="text-xs font-medium text-gray-400">{formatearFechaHora(mov.fecha)}</time>
                     </div>
-                    <p className="text-sm text-gray-600 mb-2">Movió <strong className="text-blue-600">{mov.cantidad} {mov.material?.nombre}</strong></p>
-                    <div className="flex items-center gap-2 text-xs font-medium text-gray-500 bg-gray-50 p-2 rounded-lg">
-                      <span className="truncate w-1/2 text-right text-red-500">{mov.origen}</span>
-                      <span>➡️</span>
-                      <span className="truncate w-1/2 text-green-600">{mov.destino}</span>
+                    <p className="text-sm text-gray-600 mb-3">Movió <strong className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">{mov.cantidad}x {mov.material?.nombre}</strong></p>
+                    <div className="flex items-center gap-2 text-xs font-medium text-gray-500 bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                      <span className="truncate w-[45%] text-right text-gray-600 capitalize">
+                        {mov.origen_tipo === 'SEDE' ? '📍' : '👤'} {mov.origen}
+                      </span>
+                      <span className="text-blue-400">➔</span>
+                      <span className="truncate w-[45%] text-gray-800 font-bold capitalize">
+                        {mov.destino_tipo === 'SEDE' ? '📍' : '👤'} {mov.destino}
+                      </span>
                     </div>
                     {mov.notas && <p className="text-xs mt-2 text-gray-400 italic">" {mov.notas} "</p>}
                   </div>
@@ -177,48 +301,108 @@ export default function InventarioPage() {
         </>
       )}
 
-      {/* --- MODAL: MATERIAL (ADMIN) --- */}
+      {/* --- MODAL: MATERIAL NUEVO (ADMIN) --- */}
       {isMaterialModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-sm overflow-hidden">
-            <div className="p-5 border-b flex justify-between items-center"><h2 className="text-xl font-bold text-blue-900">Nuevo Material</h2><button onClick={() => setIsMaterialModalOpen(false)} className="text-gray-400 font-bold text-xl p-2">✕</button></div>
-            <form onSubmit={handleSaveMaterial} className="p-6 flex flex-col gap-4">
-              <div><label className="text-sm font-semibold text-gray-700">Nombre *</label><input required value={formMaterial.nombre} onChange={e => setFormMaterial({...formMaterial, nombre: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej: Pañuelos de Colores" /></div>
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b flex justify-between items-center"><h2 className="text-xl font-bold text-blue-900">Nuevo Material</h2><button onClick={() => setIsMaterialModalOpen(false)} className="text-gray-400 hover:bg-gray-100 rounded-full font-bold text-xl w-10 h-10 flex justify-center items-center">✕</button></div>
+            <form onSubmit={handleSaveMaterial} className="p-6 flex flex-col gap-4 overflow-y-auto">
+              <div><label className="text-sm font-semibold text-gray-700">Nombre del recurso *</label><input required value={formMaterial.nombre} onChange={e => setFormMaterial({...formMaterial, nombre: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej: Pañuelos de Colores" /></div>
               
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-sm font-semibold text-gray-700">Cantidad *</label><input required type="number" min="1" value={formMaterial.cantidad_total} onChange={e => setFormMaterial({...formMaterial, cantidad_total: parseInt(e.target.value)})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                <div><label className="text-sm font-semibold text-gray-700">Cantidad Total *</label><input required type="number" min="1" value={formMaterial.cantidad_total} onChange={e => setFormMaterial({...formMaterial, cantidad_total: parseInt(e.target.value)})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 text-lg font-bold focus:ring-2 focus:ring-blue-500 outline-none" /></div>
                 <div>
-                  <label className="text-sm font-semibold text-gray-700">Sede Base</label>
-                  <select value={formMaterial.sede_id} onChange={e => setFormMaterial({...formMaterial, sede_id: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none">
-                    <option value="">Sin Sede</option>
+                  <label className="text-sm font-semibold text-gray-700">Sede Inicial</label>
+                  <select value={formMaterial.sede_base_id} onChange={e => setFormMaterial({...formMaterial, sede_base_id: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="">Sin ubicar (En tránsito)</option>
                     {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                   </select>
                 </div>
               </div>
 
-              <div><label className="text-sm font-semibold text-gray-700">Descripción / Detalles</label><input value={formMaterial.descripcion} onChange={e => setFormMaterial({...formMaterial, descripcion: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej: Están en la caja roja" /></div>
-              <div className="mt-4 flex gap-3"><button type="button" onClick={() => setIsMaterialModalOpen(false)} className="w-1/3 py-3 rounded-xl font-medium text-gray-600 bg-gray-100">Cancelar</button><button type="submit" disabled={isSaving || !formMaterial.nombre} className="w-2/3 py-3 rounded-xl font-bold bg-blue-600 text-white disabled:opacity-50">{isSaving ? 'Guardando...' : 'Guardar'}</button></div>
+              <div><label className="text-sm font-semibold text-gray-700">Aclaraciones</label><input value={formMaterial.descripcion} onChange={e => setFormMaterial({...formMaterial, descripcion: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej: Están en la caja roja" /></div>
+              
+              <div className="mt-4 flex gap-3 pt-2 border-t">
+                <button type="button" onClick={() => setIsMaterialModalOpen(false)} className="w-1/3 py-3 rounded-xl font-medium text-gray-600 bg-gray-100 hover:bg-gray-200">Cancelar</button>
+                <button type="submit" disabled={isSaving || !formMaterial.nombre} className="w-2/3 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">Guardar</button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* --- MODAL: REGISTRAR MOVIMIENTO --- */}
+      {/* --- MODAL: REGISTRAR MOVIMIENTO (TRANSFERENCIA) --- */}
       {isMovimientoModalOpen && materialSeleccionado && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className="p-5 border-b bg-blue-50 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-blue-900">Mover {materialSeleccionado.nombre}</h2>
-              <button onClick={() => setIsMovimientoModalOpen(false)} className="text-gray-500 font-bold text-xl p-2">✕</button>
-            </div>
-            <form onSubmit={handleSaveMovimiento} className="p-6 flex flex-col gap-4">
-              <div><label className="text-sm font-semibold text-gray-700">¿Cuántos vas a mover? (Max: {materialSeleccionado.cantidad_total}) *</label><input required type="number" min="1" max={materialSeleccionado.cantidad_total} value={formMovimiento.cantidad} onChange={e => setFormMovimiento({...formMovimiento, cantidad: parseInt(e.target.value)})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 text-lg font-bold text-blue-700 outline-none" /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-sm font-semibold text-gray-700">Origen *</label><input required value={formMovimiento.origen} onChange={e => setFormMovimiento({...formMovimiento, origen: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 outline-none" placeholder="Ej: Depósito" /></div>
-                <div><label className="text-sm font-semibold text-gray-700">Destino *</label><input required value={formMovimiento.destino} onChange={e => setFormMovimiento({...formMovimiento, destino: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 outline-none" placeholder="Ej: Sede Palermo o Cumple" /></div>
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b bg-blue-600 text-white flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold">Transferir Material</h2>
+                <p className="text-blue-200 text-sm">{materialSeleccionado.nombre}</p>
               </div>
-              <div><label className="text-sm font-semibold text-gray-700">Aclaraciones (Opcional)</label><input value={formMovimiento.notas} onChange={e => setFormMovimiento({...formMovimiento, notas: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 outline-none" placeholder="Ej: Faltó uno que estaba roto" /></div>
-              <div className="mt-4 flex gap-3"><button type="button" onClick={() => setIsMovimientoModalOpen(false)} className="w-1/3 py-3 rounded-xl font-medium text-gray-600 bg-gray-100">Cancelar</button><button type="submit" disabled={isSaving || !formMovimiento.origen || !formMovimiento.destino} className="w-2/3 py-3 rounded-xl font-bold bg-blue-600 text-white disabled:opacity-50">Registrar</button></div>
+              <button onClick={() => setIsMovimientoModalOpen(false)} className="text-white bg-blue-700 hover:bg-blue-800 rounded-full font-bold text-xl w-10 h-10 transition">✕</button>
+            </div>
+            
+            <form onSubmit={handleSaveMovimiento} className="p-6 flex flex-col gap-5 overflow-y-auto">
+              
+              <div className="bg-blue-50 p-4 rounded-2xl flex items-center justify-between border border-blue-100">
+                <label className="text-sm font-bold text-blue-900">¿Cuántos vas a mover?</label>
+                <input required type="number" min="1" max={materialSeleccionado.cantidad_total} value={formMovimiento.cantidad} onChange={e => setFormMovimiento({...formMovimiento, cantidad: parseInt(e.target.value)})} className="w-20 p-2 text-center border-2 border-blue-200 rounded-xl bg-white text-xl font-black text-blue-700 outline-none focus:border-blue-500" />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                {/* ORIGEN */}
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 relative">
+                  <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-white border-2 border-gray-300 rounded-full flex items-center justify-center text-xs font-bold text-gray-400">De</div>
+                  <div className="ml-2">
+                    <div className="flex gap-2 mb-2">
+                      <button type="button" onClick={() => setFormMovimiento({...formMovimiento, origen_tipo: 'SEDE', origen_id: ''})} className={`flex-1 py-1 text-xs font-bold rounded-lg border ${formMovimiento.origen_tipo === 'SEDE' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-300'}`}>📍 Sede</button>
+                      <button type="button" onClick={() => setFormMovimiento({...formMovimiento, origen_tipo: 'USUARIO', origen_id: ''})} className={`flex-1 py-1 text-xs font-bold rounded-lg border ${formMovimiento.origen_tipo === 'USUARIO' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-300'}`}>👤 Persona</button>
+                    </div>
+                    <select required value={formMovimiento.origen_id} onChange={e => setFormMovimiento({...formMovimiento, origen_id: e.target.value})} className="w-full p-2.5 border rounded-xl bg-white outline-none capitalize text-sm font-medium">
+                      <option value="">-- Seleccionar --</option>
+                      {formMovimiento.origen_tipo === 'SEDE' && (
+                        <>
+                          <option value="SIN_UBICAR">❓ Stock sin ubicar ({materialSeleccionado.sin_ubicar})</option>
+                          {sedes.map(s => {
+                            const cant = materialSeleccionado.ubicaciones.find((u:any) => u.sede_id === s.id)?.cantidad || 0
+                            return <option key={s.id} value={s.id}>{s.nombre} ({cant} disp.)</option>
+                          })}
+                        </>
+                      )}
+                      {formMovimiento.origen_tipo === 'USUARIO' && usuarios.map(u => {
+                        const cant = materialSeleccionado.ubicaciones.find((ub:any) => ub.usuario_username === u.username)?.cantidad || 0
+                        return <option key={u.username} value={u.username}>{u.username} ({cant} disp.)</option>
+                      })}
+                    </select>
+                  </div>
+                </div>
+
+                {/* DESTINO */}
+                <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 relative">
+                  <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-blue-600 border-2 border-blue-200 rounded-full flex items-center justify-center text-xs font-bold text-white">A</div>
+                  <div className="ml-2">
+                    <div className="flex gap-2 mb-2">
+                      <button type="button" onClick={() => setFormMovimiento({...formMovimiento, destino_tipo: 'SEDE', destino_id: ''})} className={`flex-1 py-1 text-xs font-bold rounded-lg border ${formMovimiento.destino_tipo === 'SEDE' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-200'}`}>📍 Sede</button>
+                      <button type="button" onClick={() => setFormMovimiento({...formMovimiento, destino_tipo: 'USUARIO', destino_id: ''})} className={`flex-1 py-1 text-xs font-bold rounded-lg border ${formMovimiento.destino_tipo === 'USUARIO' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-200'}`}>👤 Persona</button>
+                    </div>
+                    <select required value={formMovimiento.destino_id} onChange={e => setFormMovimiento({...formMovimiento, destino_id: e.target.value})} className="w-full p-2.5 border rounded-xl bg-white outline-none capitalize text-sm font-medium border-blue-200 focus:ring-2 focus:ring-blue-500">
+                      <option value="">-- Seleccionar --</option>
+                      {formMovimiento.destino_tipo === 'SEDE' && sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                      {formMovimiento.destino_tipo === 'USUARIO' && usuarios.map(u => <option key={u.username} value={u.username}>{u.username}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div><input value={formMovimiento.notas} onChange={e => setFormMovimiento({...formMovimiento, notas: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 outline-none text-sm" placeholder="Nota opcional (Ej: Lo lleva Mica para el cumple)" /></div>
+              
+              <div className="mt-2 flex gap-3">
+                <button type="button" onClick={() => setIsMovimientoModalOpen(false)} className="w-1/3 py-3.5 rounded-xl font-medium text-gray-600 bg-gray-100 hover:bg-gray-200">Cancelar</button>
+                <button type="submit" disabled={isSaving || !formMovimiento.origen_id || !formMovimiento.destino_id} className="w-2/3 py-3.5 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 shadow-md">
+                  {isSaving ? 'Moviendo...' : 'Confirmar Transferencia'}
+                </button>
+              </div>
             </form>
           </div>
         </div>
