@@ -27,13 +27,13 @@ export default function TareasPage() {
   const fetchData = async (role: string, user: string) => {
     setLoading(true)
     
-    // 1. Traemos los usuarios para el selector del Modal
+    // Traemos los usuarios para el selector del Modal (solo activos)
     if (role === 'ADMIN') {
-      const { data: dataUsuarios } = await supabase.from('usuarios').select('id, username').order('username')
+      const { data: dataUsuarios } = await supabase.from('usuarios').select('id, username').eq('activo', true).order('username')
       if (dataUsuarios) setUsuarios(dataUsuarios)
     }
 
-    // 2. Traemos las tareas (Si es ADMIN trae todas, si es USER trae solo las suyas)
+    // Traemos las tareas (Si es ADMIN trae todas, si es USER trae solo las suyas)
     let query = supabase.from('tareas').select('*').order('completada', { ascending: true }).order('fecha_limite', { ascending: true, nullsFirst: false })
     
     if (role !== 'ADMIN') {
@@ -129,10 +129,11 @@ export default function TareasPage() {
                     </p>
                     
                     <div className="flex flex-wrap gap-3 mt-2 text-xs font-semibold text-gray-500">
-                      {/* Mostrar a quién le toca (si sos admin está bueno ver de quién es la tarea) */}
+                      
+                      {/* Mostrar a quién le toca (si sos admin está bueno ver para quién es la tarea) */}
                       {userRole === 'ADMIN' && (
                         <span className="bg-gray-100 px-2 py-1 rounded-md capitalize flex items-center gap-1">
-                          👤 {tarea.asignado_a}
+                          👤 Para: {tarea.asignado_a}
                         </span>
                       )}
                       
@@ -141,12 +142,11 @@ export default function TareasPage() {
                         📅 {formatearFecha(tarea.fecha_limite)}
                       </span>
 
-                      {/* Autor (quien la pidió) */}
-                      {userRole !== 'ADMIN' && (
-                        <span className="px-2 py-1 rounded-md capitalize opacity-70">
-                          Pedida por: {tarea.creado_por}
-                        </span>
-                      )}
+                      {/* Autor (quien la pidió) - AHORA SIEMPRE VISIBLE */}
+                      <span className="bg-purple-50 text-purple-700 border border-purple-100 px-2 py-1 rounded-md capitalize flex items-center gap-1">
+                        ✍️ Asignó: {tarea.creado_por}
+                      </span>
+                      
                     </div>
                   </div>
 
