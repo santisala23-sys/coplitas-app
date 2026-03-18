@@ -11,17 +11,16 @@ export default function InventarioPage() {
   const [movimientos, setMovimientos] = useState<any[]>([])
   const [sedes, setSedes] = useState<any[]>([])
   const [usuarios, setUsuarios] = useState<any[]>([])
+  const [eventos, setEventos] = useState<any[]>([]) // <-- Nuevo
   const [loading, setLoading] = useState(true)
   
   const [userRole, setUserRole] = useState<string | null>(null)
   const [currentUser, setCurrentUser] = useState<string | null>(null)
 
-  // Estados para Modales
   const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false)
   const [isMovimientoModalOpen, setIsMovimientoModalOpen] = useState(false)
   const [materialSeleccionado, setMaterialSeleccionado] = useState<any>(null)
 
-  // Formularios
   const [formMaterial, setFormMaterial] = useState({ nombre: '', cantidad_total: 1, descripcion: '', sede_base_id: '' })
   const [formMovimiento, setFormMovimiento] = useState({ 
     cantidad: 1, 
@@ -42,21 +41,22 @@ export default function InventarioPage() {
   const fetchData = async () => {
     setLoading(true)
     
-    // Traer Sedes y Usuarios activos para los selectores de movimiento
-    const [{ data: dataSedes }, { data: dataUsuarios }] = await Promise.all([
+    // Traer Sedes, Usuarios y Eventos pendientes para los selectores
+    const [{ data: dataSedes }, { data: dataUsuarios }, { data: dataEventos }] = await Promise.all([
       supabase.from('sedes').select('*').eq('estado', 'ACTIVA').order('nombre'),
-      supabase.from('usuarios').select('username').eq('activo', true).order('username')
+      supabase.from('usuarios').select('username').eq('activo', true).order('username'),
+      supabase.from('eventos').select('id, titulo').eq('estado', 'PENDIENTE').order('fecha') // <-- Nuevo
     ])
     if (dataSedes) setSedes(dataSedes)
     if (dataUsuarios) setUsuarios(dataUsuarios)
+    if (dataEventos) setEventos(dataEventos)
 
-    // Traer Materiales CON sus ubicaciones actuales
+    // Traer Materiales CON sus ubicaciones (Sedes o Eventos)
     const { data: dataMateriales } = await supabase
       .from('materiales')
-      .select('*, material_ubicacion(*, sede:sedes(nombre))')
+      .select('*, material_ubicacion(*, sede:sedes(nombre), evento:eventos(titulo))')
       .order('nombre')
     
-    // Filtramos para no mostrar ubicaciones con 0 cantidad y calculamos el stock "perdido" o sin ubicar
     const materialesProcesados = dataMateriales?.map(mat => {
       const ubicacionesReales = mat.material_ubicacion?.filter((u: any) => u.cantidad > 0) || []
       const cantUbicada = ubicacionesReales.reduce((acc: number, u: any) => acc + u.cantidad, 0)
@@ -66,7 +66,6 @@ export default function InventarioPage() {
     
     setMateriales(materialesProcesados)
 
-    // Traer Historial
     const { data: dataMovimientos } = await supabase
       .from('movimientos_material')
       .select('*, material:materiales(nombre)')
@@ -77,12 +76,10 @@ export default function InventarioPage() {
     setLoading(false)
   }
 
-  // --- NUEVO MATERIAL ---
   const handleSaveMaterial = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
     
-    // 1. Creamos el material
     const { data: nuevoMat, error } = await supabase.from('materiales').insert([{
       nombre: formMaterial.nombre,
       cantidad_total: formMaterial.cantidad_total,
@@ -90,7 +87,6 @@ export default function InventarioPage() {
     }]).select().single()
 
     if (!error && nuevoMat && formMaterial.sede_base_id) {
-      // 2. Si eligió una sede base, le asignamos todo el stock inicial a esa sede
       await supabase.from('material_ubicacion').insert([{
         material_id: nuevoMat.id,
         sede_id: formMaterial.sede_base_id,
@@ -104,7 +100,6 @@ export default function InventarioPage() {
     fetchData()
   }
 
-  // --- NUEVO MOVIMIENTO ---
   const handleSaveMovimiento = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
@@ -112,11 +107,9 @@ export default function InventarioPage() {
     const matId = materialSeleccionado.id
     const qty = formMovimiento.cantidad
 
-    // Lógica compleja de Base de Datos para sumar y restar:
-    
-    // 1. Restar del origen (Solo si el origen NO es "Sin Ubicar")
+    // 1. Restar del origen
     if (formMovimiento.origen_id !== 'SIN_UBICAR') {
-      const colOrigen = formMovimiento.origen_tipo === 'SEDE' ? 'sede_id' : 'usuario_username'
+      const colOrigen = formMovimiento.origen_tipo === 'SEDE' ? 'sede_id' : formMovimiento.origen_tipo === 'EVENTO' ? 'evento_id' : 'usuario_username'
       
       const { data: ubOrigen } = await supabase.from('material_ubicacion')
         .select('*').eq('material_id', matId).eq(colOrigen, formMovimiento.origen_id).single()
@@ -127,7 +120,7 @@ export default function InventarioPage() {
     }
 
     // 2. Sumar al destino
-    const colDestino = formMovimiento.destino_tipo === 'SEDE' ? 'sede_id' : 'usuario_username'
+    const colDestino = formMovimiento.destino_tipo === 'SEDE' ? 'sede_id' : formMovimiento.destino_tipo === 'EVENTO' ? 'evento_id' : 'usuario_username'
     const { data: ubDestino } = await supabase.from('material_ubicacion')
       .select('*').eq('material_id', matId).eq(colDestino, formMovimiento.destino_id).single()
 
@@ -139,23 +132,18 @@ export default function InventarioPage() {
       await supabase.from('material_ubicacion').insert([nuevoDestino])
     }
 
-    // 3. Registrar el historial para auditoría
+    // 3. Registrar el historial
     let nombreOrigen = formMovimiento.origen_id === 'SIN_UBICAR' ? 'Stock sin ubicar' : formMovimiento.origen_id
-    if (formMovimiento.origen_tipo === 'SEDE' && formMovimiento.origen_id !== 'SIN_UBICAR') {
-      nombreOrigen = sedes.find(s => s.id === formMovimiento.origen_id)?.nombre || nombreOrigen
-    }
+    if (formMovimiento.origen_tipo === 'SEDE' && formMovimiento.origen_id !== 'SIN_UBICAR') nombreOrigen = sedes.find(s => s.id === formMovimiento.origen_id)?.nombre || nombreOrigen
+    if (formMovimiento.origen_tipo === 'EVENTO' && formMovimiento.origen_id !== 'SIN_UBICAR') nombreOrigen = eventos.find(e => e.id === formMovimiento.origen_id)?.titulo || nombreOrigen
     
     let nombreDestino = formMovimiento.destino_id
-    if (formMovimiento.destino_tipo === 'SEDE') {
-      nombreDestino = sedes.find(s => s.id === formMovimiento.destino_id)?.nombre || nombreDestino
-    }
+    if (formMovimiento.destino_tipo === 'SEDE') nombreDestino = sedes.find(s => s.id === formMovimiento.destino_id)?.nombre || nombreDestino
+    if (formMovimiento.destino_tipo === 'EVENTO') nombreDestino = eventos.find(e => e.id === formMovimiento.destino_id)?.titulo || nombreDestino
 
     await supabase.from('movimientos_material').insert([{
-      material_id: matId,
-      usuario: currentUser,
-      cantidad: qty,
-      origen: nombreOrigen,
-      destino: nombreDestino,
+      material_id: matId, usuario: currentUser, cantidad: qty,
+      origen: nombreOrigen, destino: nombreDestino,
       origen_tipo: formMovimiento.origen_tipo, origen_id: formMovimiento.origen_id,
       destino_tipo: formMovimiento.destino_tipo, destino_id: formMovimiento.destino_id,
       notas: formMovimiento.notas
@@ -167,28 +155,19 @@ export default function InventarioPage() {
     setActiveTab('historial')
   }
 
-  // Helpers
-  const formatearFechaHora = (fechaStr: string) => {
-    return new Date(fechaStr).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit' })
-  }
+  const formatearFechaHora = (fechaStr: string) => new Date(fechaStr).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit' })
 
   const abrirModalMover = (mat: any) => {
     setMaterialSeleccionado(mat)
-    // Pre-seleccionar el primer origen disponible (la ubicación que tenga más stock)
     let mejorOrigen = { tipo: 'SEDE', id: 'SIN_UBICAR', max: mat.sin_ubicar }
     
     mat.ubicaciones.forEach((u: any) => {
       if (u.cantidad > mejorOrigen.max) {
-        mejorOrigen = { tipo: u.sede_id ? 'SEDE' : 'USUARIO', id: u.sede_id || u.usuario_username, max: u.cantidad }
+        mejorOrigen = { tipo: u.sede_id ? 'SEDE' : u.evento_id ? 'EVENTO' : 'USUARIO', id: u.sede_id || u.evento_id || u.usuario_username, max: u.cantidad }
       }
     })
 
-    setFormMovimiento({
-      cantidad: 1,
-      origen_tipo: mejorOrigen.tipo, origen_id: mejorOrigen.id,
-      destino_tipo: 'USUARIO', destino_id: currentUser || '',
-      notas: ''
-    })
+    setFormMovimiento({ cantidad: 1, origen_tipo: mejorOrigen.tipo, origen_id: mejorOrigen.id, destino_tipo: 'USUARIO', destino_id: currentUser || '', notas: '' })
     setIsMovimientoModalOpen(true)
   }
 
@@ -202,9 +181,7 @@ export default function InventarioPage() {
         </div>
         
         {userRole === 'ADMIN' && activeTab === 'stock' && (
-          <button onClick={() => setIsMaterialModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold shadow-sm transition w-full md:w-auto">
-            + Nuevo Material
-          </button>
+          <button onClick={() => setIsMaterialModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold shadow-sm transition w-full md:w-auto">+ Nuevo Material</button>
         )}
       </div>
 
@@ -213,13 +190,8 @@ export default function InventarioPage() {
         <button className={`pb-3 text-lg font-bold px-2 ${activeTab === 'historial' ? 'text-blue-600 border-b-4 border-blue-600 -mb-0.5' : 'text-gray-400 hover:text-gray-600'}`} onClick={() => setActiveTab('historial')}>Últimos Movimientos</button>
       </div>
 
-      {loading ? (
-        <div className="text-center py-10 text-gray-500">Cargando datos...</div>
-      ) : (
+      {loading ? ( <div className="text-center py-10 text-gray-500">Cargando datos...</div> ) : (
         <>
-          {/* ========================================== */}
-          {/* VISTA 1: STOCK Y UBICACIONES               */}
-          {/* ========================================== */}
           {activeTab === 'stock' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
               {materiales.map((mat) => (
@@ -231,20 +203,20 @@ export default function InventarioPage() {
                         {mat.descripcion && <p className="text-sm text-gray-500 mt-1">{mat.descripcion}</p>}
                       </div>
                       <div className="bg-blue-50 text-blue-700 font-black px-4 py-2 rounded-xl shrink-0 text-lg flex flex-col items-center border border-blue-100">
-                        <span className="text-[10px] uppercase tracking-wider opacity-70 mb-[-4px]">Total</span>
-                        {mat.cantidad_total}
+                        <span className="text-[10px] uppercase tracking-wider opacity-70 mb-[-4px]">Total</span>{mat.cantidad_total}
                       </div>
                     </div>
                     
-                    {/* LISTA DE DÓNDE ESTÁN LAS COSAS */}
                     <div className="bg-gray-50 rounded-2xl p-4 mb-4 border border-gray-100">
                       <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">¿Dónde están hoy?</h3>
                       <ul className="flex flex-col gap-2">
                         {mat.ubicaciones.map((ub: any) => (
                           <li key={ub.id} className="flex justify-between items-center text-sm font-medium">
                             <span className="flex items-center gap-2 text-gray-700">
-                              {ub.sede_id ? <span className="bg-teal-100 text-teal-700 p-1 rounded-md">📍</span> : <span className="bg-purple-100 text-purple-700 p-1 rounded-md">👤</span>}
-                              {ub.sede?.nombre || <span className="capitalize">{ub.usuario_username}</span>}
+                              {ub.sede_id && <span className="bg-teal-100 text-teal-700 p-1 rounded-md">📍</span>}
+                              {ub.evento_id && <span className="bg-rose-100 text-rose-700 p-1 rounded-md">🎉</span>}
+                              {ub.usuario_username && <span className="bg-purple-100 text-purple-700 p-1 rounded-md">👤</span>}
+                              {ub.sede?.nombre || ub.evento?.titulo || <span className="capitalize">{ub.usuario_username}</span>}
                             </span>
                             <span className="bg-white px-3 py-1 rounded-lg border border-gray-200 font-bold">{ub.cantidad}</span>
                           </li>
@@ -264,13 +236,9 @@ export default function InventarioPage() {
                   </button>
                 </div>
               ))}
-              {materiales.length === 0 && <p className="text-gray-500 col-span-2 text-center py-10">No hay materiales cargados en el inventario.</p>}
             </div>
           )}
 
-          {/* ========================================== */}
-          {/* VISTA 2: HISTORIAL                         */}
-          {/* ========================================== */}
           {activeTab === 'historial' && (
             <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-gray-300 before:to-transparent">
               {movimientos.map((mov) => (
@@ -283,63 +251,44 @@ export default function InventarioPage() {
                     </div>
                     <p className="text-sm text-gray-600 mb-3">Movió <strong className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">{mov.cantidad}x {mov.material?.nombre}</strong></p>
                     <div className="flex items-center gap-2 text-xs font-medium text-gray-500 bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                      <span className="truncate w-[45%] text-right text-gray-600 capitalize">
-                        {mov.origen_tipo === 'SEDE' ? '📍' : '👤'} {mov.origen}
-                      </span>
+                      <span className="truncate w-[45%] text-right text-gray-600 capitalize">{mov.origen_tipo === 'EVENTO' ? '🎉' : mov.origen_tipo === 'SEDE' ? '📍' : '👤'} {mov.origen}</span>
                       <span className="text-blue-400">➔</span>
-                      <span className="truncate w-[45%] text-gray-800 font-bold capitalize">
-                        {mov.destino_tipo === 'SEDE' ? '📍' : '👤'} {mov.destino}
-                      </span>
+                      <span className="truncate w-[45%] text-gray-800 font-bold capitalize">{mov.destino_tipo === 'EVENTO' ? '🎉' : mov.destino_tipo === 'SEDE' ? '📍' : '👤'} {mov.destino}</span>
                     </div>
                     {mov.notas && <p className="text-xs mt-2 text-gray-400 italic">" {mov.notas} "</p>}
                   </div>
                 </div>
               ))}
-              {movimientos.length === 0 && <p className="text-gray-500 text-center py-10">No hay movimientos registrados.</p>}
             </div>
           )}
         </>
       )}
 
-      {/* --- MODAL: MATERIAL NUEVO (ADMIN) --- */}
+      {/* --- MODALES --- */}
+      {/* MODAL NUEVO MATERIAL */}
       {isMaterialModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-5 border-b flex justify-between items-center"><h2 className="text-xl font-bold text-blue-900">Nuevo Material</h2><button onClick={() => setIsMaterialModalOpen(false)} className="text-gray-400 hover:bg-gray-100 rounded-full font-bold text-xl w-10 h-10 flex justify-center items-center">✕</button></div>
             <form onSubmit={handleSaveMaterial} className="p-6 flex flex-col gap-4 overflow-y-auto">
-              <div><label className="text-sm font-semibold text-gray-700">Nombre del recurso *</label><input required value={formMaterial.nombre} onChange={e => setFormMaterial({...formMaterial, nombre: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej: Pañuelos de Colores" /></div>
-              
+              <div><label className="text-sm font-semibold text-gray-700">Nombre del recurso *</label><input required value={formMaterial.nombre} onChange={e => setFormMaterial({...formMaterial, nombre: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-sm font-semibold text-gray-700">Cantidad Total *</label><input required type="number" min="1" value={formMaterial.cantidad_total} onChange={e => setFormMaterial({...formMaterial, cantidad_total: parseInt(e.target.value)})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 text-lg font-bold focus:ring-2 focus:ring-blue-500 outline-none" /></div>
-                <div>
-                  <label className="text-sm font-semibold text-gray-700">Sede Inicial</label>
-                  <select value={formMaterial.sede_base_id} onChange={e => setFormMaterial({...formMaterial, sede_base_id: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none">
-                    <option value="">Sin ubicar (En tránsito)</option>
-                    {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                  </select>
-                </div>
+                <div><label className="text-sm font-semibold text-gray-700">Sede Inicial</label><select value={formMaterial.sede_base_id} onChange={e => setFormMaterial({...formMaterial, sede_base_id: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none"><option value="">Sin ubicar (En tránsito)</option>{sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}</select></div>
               </div>
-
-              <div><label className="text-sm font-semibold text-gray-700">Aclaraciones</label><input value={formMaterial.descripcion} onChange={e => setFormMaterial({...formMaterial, descripcion: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej: Están en la caja roja" /></div>
-              
-              <div className="mt-4 flex gap-3 pt-2 border-t">
-                <button type="button" onClick={() => setIsMaterialModalOpen(false)} className="w-1/3 py-3 rounded-xl font-medium text-gray-600 bg-gray-100 hover:bg-gray-200">Cancelar</button>
-                <button type="submit" disabled={isSaving || !formMaterial.nombre} className="w-2/3 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">Guardar</button>
-              </div>
+              <div><label className="text-sm font-semibold text-gray-700">Aclaraciones</label><input value={formMaterial.descripcion} onChange={e => setFormMaterial({...formMaterial, descripcion: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+              <div className="mt-4 flex gap-3 pt-2 border-t"><button type="button" onClick={() => setIsMaterialModalOpen(false)} className="w-1/3 py-3 rounded-xl font-medium text-gray-600 bg-gray-100 hover:bg-gray-200">Cancelar</button><button type="submit" disabled={isSaving || !formMaterial.nombre} className="w-2/3 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">Guardar</button></div>
             </form>
           </div>
         </div>
       )}
 
-      {/* --- MODAL: REGISTRAR MOVIMIENTO (TRANSFERENCIA) --- */}
+      {/* MODAL MOVER MATERIAL */}
       {isMovimientoModalOpen && materialSeleccionado && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-5 border-b bg-blue-600 text-white flex justify-between items-center">
-              <div>
-                <h2 className="text-xl font-bold">Transferir Material</h2>
-                <p className="text-blue-200 text-sm">{materialSeleccionado.nombre}</p>
-              </div>
+              <div><h2 className="text-xl font-bold">Transferir Material</h2><p className="text-blue-200 text-sm">{materialSeleccionado.nombre}</p></div>
               <button onClick={() => setIsMovimientoModalOpen(false)} className="text-white bg-blue-700 hover:bg-blue-800 rounded-full font-bold text-xl w-10 h-10 transition">✕</button>
             </div>
             
@@ -355,25 +304,18 @@ export default function InventarioPage() {
                 <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 relative">
                   <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-white border-2 border-gray-300 rounded-full flex items-center justify-center text-xs font-bold text-gray-400">De</div>
                   <div className="ml-2">
-                    <div className="flex gap-2 mb-2">
-                      <button type="button" onClick={() => setFormMovimiento({...formMovimiento, origen_tipo: 'SEDE', origen_id: ''})} className={`flex-1 py-1 text-xs font-bold rounded-lg border ${formMovimiento.origen_tipo === 'SEDE' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-300'}`}>📍 Sede</button>
-                      <button type="button" onClick={() => setFormMovimiento({...formMovimiento, origen_tipo: 'USUARIO', origen_id: ''})} className={`flex-1 py-1 text-xs font-bold rounded-lg border ${formMovimiento.origen_tipo === 'USUARIO' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-300'}`}>👤 Persona</button>
+                    <div className="flex gap-1 mb-2">
+                      <button type="button" onClick={() => setFormMovimiento({...formMovimiento, origen_tipo: 'SEDE', origen_id: ''})} className={`flex-1 py-1 text-[11px] font-bold rounded-lg border ${formMovimiento.origen_tipo === 'SEDE' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-300'}`}>📍 Sede</button>
+                      <button type="button" onClick={() => setFormMovimiento({...formMovimiento, origen_tipo: 'USUARIO', origen_id: ''})} className={`flex-1 py-1 text-[11px] font-bold rounded-lg border ${formMovimiento.origen_tipo === 'USUARIO' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-300'}`}>👤 Persona</button>
+                      <button type="button" onClick={() => setFormMovimiento({...formMovimiento, origen_tipo: 'EVENTO', origen_id: ''})} className={`flex-1 py-1 text-[11px] font-bold rounded-lg border ${formMovimiento.origen_tipo === 'EVENTO' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-300'}`}>🎉 Evento</button>
                     </div>
                     <select required value={formMovimiento.origen_id} onChange={e => setFormMovimiento({...formMovimiento, origen_id: e.target.value})} className="w-full p-2.5 border rounded-xl bg-white outline-none capitalize text-sm font-medium">
                       <option value="">-- Seleccionar --</option>
                       {formMovimiento.origen_tipo === 'SEDE' && (
-                        <>
-                          <option value="SIN_UBICAR">❓ Stock sin ubicar ({materialSeleccionado.sin_ubicar})</option>
-                          {sedes.map(s => {
-                            const cant = materialSeleccionado.ubicaciones.find((u:any) => u.sede_id === s.id)?.cantidad || 0
-                            return <option key={s.id} value={s.id}>{s.nombre} ({cant} disp.)</option>
-                          })}
-                        </>
+                        <><option value="SIN_UBICAR">❓ Stock sin ubicar ({materialSeleccionado.sin_ubicar})</option>{sedes.map(s => { const cant = materialSeleccionado.ubicaciones.find((u:any) => u.sede_id === s.id)?.cantidad || 0; return <option key={s.id} value={s.id}>{s.nombre} ({cant})</option> })}</>
                       )}
-                      {formMovimiento.origen_tipo === 'USUARIO' && usuarios.map(u => {
-                        const cant = materialSeleccionado.ubicaciones.find((ub:any) => ub.usuario_username === u.username)?.cantidad || 0
-                        return <option key={u.username} value={u.username}>{u.username} ({cant} disp.)</option>
-                      })}
+                      {formMovimiento.origen_tipo === 'USUARIO' && usuarios.map(u => { const cant = materialSeleccionado.ubicaciones.find((ub:any) => ub.usuario_username === u.username)?.cantidad || 0; return <option key={u.username} value={u.username}>{u.username} ({cant})</option> })}
+                      {formMovimiento.origen_tipo === 'EVENTO' && eventos.map(e => { const cant = materialSeleccionado.ubicaciones.find((ub:any) => ub.evento_id === e.id)?.cantidad || 0; return <option key={e.id} value={e.id}>{e.titulo} ({cant})</option> })}
                     </select>
                   </div>
                 </div>
@@ -382,14 +324,16 @@ export default function InventarioPage() {
                 <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 relative">
                   <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-blue-600 border-2 border-blue-200 rounded-full flex items-center justify-center text-xs font-bold text-white">A</div>
                   <div className="ml-2">
-                    <div className="flex gap-2 mb-2">
-                      <button type="button" onClick={() => setFormMovimiento({...formMovimiento, destino_tipo: 'SEDE', destino_id: ''})} className={`flex-1 py-1 text-xs font-bold rounded-lg border ${formMovimiento.destino_tipo === 'SEDE' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-200'}`}>📍 Sede</button>
-                      <button type="button" onClick={() => setFormMovimiento({...formMovimiento, destino_tipo: 'USUARIO', destino_id: ''})} className={`flex-1 py-1 text-xs font-bold rounded-lg border ${formMovimiento.destino_tipo === 'USUARIO' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-200'}`}>👤 Persona</button>
+                    <div className="flex gap-1 mb-2">
+                      <button type="button" onClick={() => setFormMovimiento({...formMovimiento, destino_tipo: 'SEDE', destino_id: ''})} className={`flex-1 py-1 text-[11px] font-bold rounded-lg border ${formMovimiento.destino_tipo === 'SEDE' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-200'}`}>📍 Sede</button>
+                      <button type="button" onClick={() => setFormMovimiento({...formMovimiento, destino_tipo: 'USUARIO', destino_id: ''})} className={`flex-1 py-1 text-[11px] font-bold rounded-lg border ${formMovimiento.destino_tipo === 'USUARIO' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-200'}`}>👤 Persona</button>
+                      <button type="button" onClick={() => setFormMovimiento({...formMovimiento, destino_tipo: 'EVENTO', destino_id: ''})} className={`flex-1 py-1 text-[11px] font-bold rounded-lg border ${formMovimiento.destino_tipo === 'EVENTO' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-200'}`}>🎉 Evento</button>
                     </div>
                     <select required value={formMovimiento.destino_id} onChange={e => setFormMovimiento({...formMovimiento, destino_id: e.target.value})} className="w-full p-2.5 border rounded-xl bg-white outline-none capitalize text-sm font-medium border-blue-200 focus:ring-2 focus:ring-blue-500">
                       <option value="">-- Seleccionar --</option>
                       {formMovimiento.destino_tipo === 'SEDE' && sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                       {formMovimiento.destino_tipo === 'USUARIO' && usuarios.map(u => <option key={u.username} value={u.username}>{u.username}</option>)}
+                      {formMovimiento.destino_tipo === 'EVENTO' && eventos.map(e => <option key={e.id} value={e.id}>{e.titulo}</option>)}
                     </select>
                   </div>
                 </div>
