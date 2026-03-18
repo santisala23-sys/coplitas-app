@@ -9,29 +9,25 @@ export default function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
   
-  // Guardamos el nombre de usuario en un estado
   const [username, setUsername] = useState('Equipo')
 
   useEffect(() => {
-    // Apenas carga el componente, leemos la cookie con el nombre
     const user = Cookies.get('coplitas_user')
     if (user) {
       setUsername(user)
     }
   }, [])
 
-  // No mostramos la navbar en la pantalla de login
   if (pathname === '/login') return null
 
   const navLinks = [
     { name: 'Inicio', href: '/', icon: '🏠', exact: true },
     { name: 'Canciones', href: '/catalogo', icon: '🎵' },
     { name: 'Planis', href: '/planis', icon: '📋' },
-    { name: 'Eventos', href: '/eventos', icon: '🎉' }, // <-- NUEVO MÓDULO
+    { name: 'Eventos', href: '/eventos', icon: '🎉' },
     { name: 'Tareas', href: '/tareas', icon: '✅' },
     { name: 'Inventario', href: '/inventario', icon: '📦' },
   ]
-  
 
   const handleLogout = () => {
     Cookies.remove('coplitas_role')
@@ -88,7 +84,6 @@ export default function Navbar() {
 
       {/* --- HEADER SUPERIOR (MOBILE) --- */}
       <div className="md:hidden fixed top-0 left-0 w-full bg-white/90 backdrop-blur border-b p-3 px-4 z-40 flex justify-between items-center shadow-sm">
-        {/* ACÁ AGREGAMOS EL NOMBRE DEL USUARIO */}
         <div className="flex items-baseline gap-2">
           <h2 className="font-bold text-purple-700 text-lg">Coplitas</h2>
           <span className="text-sm font-medium text-gray-500 capitalize">| {username}</span>
@@ -102,8 +97,8 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* --- BARRA INFERIOR (MOBILE) --- */}
-      <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t flex justify-around p-2 pb-safe z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+      {/* --- BARRA INFERIOR SCROLLABLE (MOBILE) --- */}
+      <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t flex overflow-x-auto items-center px-2 py-1 pb-safe z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] hide-scrollbar snap-x">
         {navLinks.map((link) => {
           const isActive = link.exact 
                 ? pathname === link.href 
@@ -113,14 +108,15 @@ export default function Navbar() {
             <Link 
               key={link.name} 
               href={link.href}
-              className={`flex flex-col items-center p-2 min-w-[64px] ${
+              /* shrink-0 evita que se aplasten, w-[72px] les da un ancho fijo a todos */
+              className={`snap-center flex flex-col items-center justify-center p-2 shrink-0 w-[72px] ${
                 isActive ? 'text-purple-700' : 'text-gray-500'
               }`}
             >
               <span className={`text-2xl mb-1 ${isActive ? 'scale-110 transition-transform' : 'grayscale opacity-80'}`}>
                 {link.icon}
               </span>
-              <span className={`text-[10px] ${isActive ? 'font-bold' : 'font-medium'}`}>
+              <span className={`text-[10px] ${isActive ? 'font-bold' : 'font-medium'} whitespace-nowrap`}>
                 {link.name}
               </span>
             </Link>
@@ -128,10 +124,22 @@ export default function Navbar() {
         })}
       </nav>
       
+      {/* Estilos globales para empujar el contenido y ocultar la barra de scroll */}
       <style jsx global>{`
+        /* Ocultar barra de scroll en Chrome, Safari y Opera */
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        /* Ocultar barra de scroll en IE, Edge y Firefox */
+        .hide-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+        }
+        
         @media (max-width: 768px) {
           main {
-            padding-top: 60px;
+            padding-top: 60px; /* Compensa el header superior */
+            padding-bottom: 80px; /* Compensa la barra inferior */
           }
         }
       `}</style>
