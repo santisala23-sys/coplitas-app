@@ -25,7 +25,7 @@ export default function Navbar() {
 
   const navLinks = [
     { name: 'Inicio', href: '/', icon: '🏠', exact: true },
-    { name: 'Catálogo', href: '/catalogo', icon: '🎵' },
+    { name: 'Canciones', href: '/catalogo', icon: '🎵' },
     { name: 'Planis', href: '/planis', icon: '📋' },
     { name: 'Eventos', href: '/eventos', icon: '🎉' }, // <-- NUEVO MÓDULO
     { name: 'Tareas', href: '/tareas', icon: '✅' },
