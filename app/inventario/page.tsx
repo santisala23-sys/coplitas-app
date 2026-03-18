@@ -1,3 +1,4 @@
+// app/inventario/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -11,7 +12,7 @@ export default function InventarioPage() {
   const [movimientos, setMovimientos] = useState<any[]>([])
   const [sedes, setSedes] = useState<any[]>([])
   const [usuarios, setUsuarios] = useState<any[]>([])
-  const [eventos, setEventos] = useState<any[]>([]) // <-- Nuevo
+  const [eventos, setEventos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   
   const [userRole, setUserRole] = useState<string | null>(null)
@@ -19,9 +20,11 @@ export default function InventarioPage() {
 
   const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false)
   const [isMovimientoModalOpen, setIsMovimientoModalOpen] = useState(false)
+  const [isSedeModalOpen, setIsSedeModalOpen] = useState(false)
   const [materialSeleccionado, setMaterialSeleccionado] = useState<any>(null)
 
   const [formMaterial, setFormMaterial] = useState({ nombre: '', cantidad_total: 1, descripcion: '', sede_base_id: '' })
+  const [formSede, setFormSede] = useState({ nombre: '', direccion: '', estado: 'ACTIVA' })
   const [formMovimiento, setFormMovimiento] = useState({ 
     cantidad: 1, 
     origen_tipo: 'SEDE', origen_id: '', 
@@ -41,17 +44,15 @@ export default function InventarioPage() {
   const fetchData = async () => {
     setLoading(true)
     
-    // Traer Sedes, Usuarios y Eventos pendientes para los selectores
     const [{ data: dataSedes }, { data: dataUsuarios }, { data: dataEventos }] = await Promise.all([
       supabase.from('sedes').select('*').eq('estado', 'ACTIVA').order('nombre'),
       supabase.from('usuarios').select('username').eq('activo', true).order('username'),
-      supabase.from('eventos').select('id, titulo').eq('estado', 'PENDIENTE').order('fecha') // <-- Nuevo
+      supabase.from('eventos').select('id, titulo').eq('estado', 'PENDIENTE').order('fecha')
     ])
     if (dataSedes) setSedes(dataSedes)
     if (dataUsuarios) setUsuarios(dataUsuarios)
     if (dataEventos) setEventos(dataEventos)
 
-    // Traer Materiales CON sus ubicaciones (Sedes o Eventos)
     const { data: dataMateriales } = await supabase
       .from('materiales')
       .select('*, material_ubicacion(*, sede:sedes(nombre), evento:eventos(titulo))')
@@ -100,6 +101,27 @@ export default function InventarioPage() {
     fetchData()
   }
 
+  const handleSaveSede = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSaving(true)
+    
+    const { data: nuevaSede, error } = await supabase.from('sedes').insert([{
+      nombre: formSede.nombre,
+      direccion: formSede.direccion,
+      estado: formSede.estado
+    }]).select().single()
+
+    if (!error && nuevaSede) {
+        setFormMaterial(prev => ({...prev, sede_base_id: nuevaSede.id}))
+    }
+
+    setFormSede({ nombre: '', direccion: '', estado: 'ACTIVA' })
+    setIsSedeModalOpen(false)
+    setIsSaving(false)
+    fetchData()
+  }
+
+
   const handleSaveMovimiento = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
@@ -107,7 +129,6 @@ export default function InventarioPage() {
     const matId = materialSeleccionado.id
     const qty = formMovimiento.cantidad
 
-    // 1. Restar del origen
     if (formMovimiento.origen_id !== 'SIN_UBICAR') {
       const colOrigen = formMovimiento.origen_tipo === 'SEDE' ? 'sede_id' : formMovimiento.origen_tipo === 'EVENTO' ? 'evento_id' : 'usuario_username'
       
@@ -119,7 +140,6 @@ export default function InventarioPage() {
       }
     }
 
-    // 2. Sumar al destino
     const colDestino = formMovimiento.destino_tipo === 'SEDE' ? 'sede_id' : formMovimiento.destino_tipo === 'EVENTO' ? 'evento_id' : 'usuario_username'
     const { data: ubDestino } = await supabase.from('material_ubicacion')
       .select('*').eq('material_id', matId).eq(colDestino, formMovimiento.destino_id).single()
@@ -132,7 +152,6 @@ export default function InventarioPage() {
       await supabase.from('material_ubicacion').insert([nuevoDestino])
     }
 
-    // 3. Registrar el historial
     let nombreOrigen = formMovimiento.origen_id === 'SIN_UBICAR' ? 'Stock sin ubicar' : formMovimiento.origen_id
     if (formMovimiento.origen_tipo === 'SEDE' && formMovimiento.origen_id !== 'SIN_UBICAR') nombreOrigen = sedes.find(s => s.id === formMovimiento.origen_id)?.nombre || nombreOrigen
     if (formMovimiento.origen_tipo === 'EVENTO' && formMovimiento.origen_id !== 'SIN_UBICAR') nombreOrigen = eventos.find(e => e.id === formMovimiento.origen_id)?.titulo || nombreOrigen
@@ -265,8 +284,9 @@ export default function InventarioPage() {
       )}
 
       {/* --- MODALES --- */}
-      {/* MODAL NUEVO MATERIAL */}
-      {isMaterialModalOpen && (
+
+       {/* MODAL NUEVO MATERIAL */}
+       {isMaterialModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-5 border-b flex justify-between items-center"><h2 className="text-xl font-bold text-blue-900">Nuevo Material</h2><button onClick={() => setIsMaterialModalOpen(false)} className="text-gray-400 hover:bg-gray-100 rounded-full font-bold text-xl w-10 h-10 flex justify-center items-center">✕</button></div>
@@ -274,7 +294,16 @@ export default function InventarioPage() {
               <div><label className="text-sm font-semibold text-gray-700">Nombre del recurso *</label><input required value={formMaterial.nombre} onChange={e => setFormMaterial({...formMaterial, nombre: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-sm font-semibold text-gray-700">Cantidad Total *</label><input required type="number" min="1" value={formMaterial.cantidad_total} onChange={e => setFormMaterial({...formMaterial, cantidad_total: parseInt(e.target.value)})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 text-lg font-bold focus:ring-2 focus:ring-blue-500 outline-none" /></div>
-                <div><label className="text-sm font-semibold text-gray-700">Sede Inicial</label><select value={formMaterial.sede_base_id} onChange={e => setFormMaterial({...formMaterial, sede_base_id: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none"><option value="">Sin ubicar (En tránsito)</option>{sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}</select></div>
+                <div className="flex flex-col">
+                  <label className="text-sm font-semibold text-gray-700">Sede Inicial</label>
+                  <div className="flex gap-2">
+                    <select value={formMaterial.sede_base_id} onChange={e => setFormMaterial({...formMaterial, sede_base_id: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none">
+                      <option value="">Sin ubicar (En tránsito)</option>
+                      {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                    </select>
+                    <button type="button" onClick={() => setIsSedeModalOpen(true)} className="mt-1 bg-teal-100 text-teal-700 p-3 rounded-xl border border-teal-200 hover:bg-teal-200 font-bold flex-shrink-0" title="Crear nueva sede">+</button>
+                  </div>
+                </div>
               </div>
               <div><label className="text-sm font-semibold text-gray-700">Aclaraciones</label><input value={formMaterial.descripcion} onChange={e => setFormMaterial({...formMaterial, descripcion: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-blue-500 outline-none" /></div>
               <div className="mt-4 flex gap-3 pt-2 border-t"><button type="button" onClick={() => setIsMaterialModalOpen(false)} className="w-1/3 py-3 rounded-xl font-medium text-gray-600 bg-gray-100 hover:bg-gray-200">Cancelar</button><button type="submit" disabled={isSaving || !formMaterial.nombre} className="w-2/3 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">Guardar</button></div>
@@ -347,6 +376,20 @@ export default function InventarioPage() {
                   {isSaving ? 'Moviendo...' : 'Confirmar Transferencia'}
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CREAR SEDE (DESDE MATERIAL) */}
+      {isSedeModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b flex justify-between items-center bg-white"><h2 className="text-xl font-bold text-teal-800">Nueva Sede Rápida</h2><button onClick={() => setIsSedeModalOpen(false)} className="text-gray-400 hover:bg-gray-100 rounded-full font-bold text-xl p-2 transition w-10 h-10 flex items-center justify-center">✕</button></div>
+            <form onSubmit={handleSaveSede} className="p-6 flex flex-col gap-4 overflow-y-auto">
+              <div><label className="text-sm font-semibold text-gray-700">Nombre de la Sede *</label><input required value={formSede.nombre} onChange={e => setFormSede({...formSede, nombre: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-teal-500 outline-none" placeholder="Ej: Colegio Las Marías" /></div>
+              <div><label className="text-sm font-semibold text-gray-700">Dirección</label><input value={formSede.direccion} onChange={e => setFormSede({...formSede, direccion: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50 mt-1 focus:ring-2 focus:ring-teal-500 outline-none" placeholder="Ej: Av. Cabildo 1234, CABA" /></div>
+              <div className="mt-6 flex gap-3 pt-2 border-t"><button type="button" onClick={() => setIsSedeModalOpen(false)} className="w-1/3 py-3 rounded-xl font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition">Cancelar</button><button type="submit" disabled={isSaving || !formSede.nombre} className="w-2/3 py-3 rounded-xl font-bold bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 transition shadow-sm">{isSaving ? 'Guardando...' : 'Crear Sede'}</button></div>
             </form>
           </div>
         </div>
