@@ -14,6 +14,7 @@ export default function TareasPage() {
   const [currentUser, setCurrentUser] = useState<string | null>(null)
   
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [tareaEditando, setTareaEditando] = useState<any>(null) // <-- Nuevo estado
 
   useEffect(() => {
     const role = Cookies.get('coplitas_role') || 'USER'
@@ -33,7 +34,7 @@ export default function TareasPage() {
       if (dataUsuarios) setUsuarios(dataUsuarios)
     }
 
-    // Traemos las tareas (Si es ADMIN trae todas, si es USER trae solo las suyas)
+    // Traemos las tareas
     let query = supabase.from('tareas').select('*').order('completada', { ascending: true }).order('fecha_limite', { ascending: true, nullsFirst: false })
     
     if (role !== 'ADMIN') {
@@ -46,15 +47,11 @@ export default function TareasPage() {
     setLoading(false)
   }
 
-  // Marcar como completada o pendiente
   const toggleCompletada = async (id: string, estadoActual: boolean) => {
-    // Actualizamos en la pantalla rápido para que no se note demora
     setTareas(tareas.map(t => t.id === id ? { ...t, completada: !estadoActual } : t))
-    // Actualizamos en la base de datos
     await supabase.from('tareas').update({ completada: !estadoActual }).eq('id', id)
   }
 
-  // Eliminar tarea (Solo admin)
   const handleEliminar = async (id: string) => {
     if (window.confirm('¿Seguro que querés borrar esta tarea?')) {
       await supabase.from('tareas').delete().eq('id', id)
@@ -62,11 +59,21 @@ export default function TareasPage() {
     }
   }
 
-  // Función para formatear la fecha
+  // Función para abrir modal en modo "Editar"
+  const handleEditar = (tarea: any) => {
+    setTareaEditando(tarea)
+    setIsModalOpen(true)
+  }
+
+  // Función para abrir modal en modo "Nueva"
+  const handleNueva = () => {
+    setTareaEditando(null)
+    setIsModalOpen(true)
+  }
+
   const formatearFecha = (fechaStr: string) => {
     if (!fechaStr) return 'Sin apuro'
     const fecha = new Date(fechaStr)
-    // Le sumamos un día porque los inputs de fecha a veces restan horas por la zona horaria
     fecha.setMinutes(fecha.getMinutes() + fecha.getTimezoneOffset()) 
     return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
   }
@@ -80,10 +87,9 @@ export default function TareasPage() {
           <p className="text-gray-600">Pendientes y armado de materiales</p>
         </div>
         
-        {/* Solo el ADMIN puede crear tareas nuevas */}
         {userRole === 'ADMIN' && (
           <button 
-            onClick={() => setIsModalOpen(true)} 
+            onClick={handleNueva} 
             className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-3 rounded-xl font-semibold shadow-sm transition w-full md:w-auto"
           >
             + Nueva Tarea
@@ -111,7 +117,6 @@ export default function TareasPage() {
                       : 'bg-white border-orange-100 shadow-sm hover:shadow-md'
                   }`}
                 >
-                  {/* Checkbox grande */}
                   <button 
                     onClick={() => toggleCompletada(tarea.id, tarea.completada)}
                     className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors mt-0.5 ${
@@ -129,36 +134,39 @@ export default function TareasPage() {
                     </p>
                     
                     <div className="flex flex-wrap gap-3 mt-2 text-xs font-semibold text-gray-500">
-                      
-                      {/* Mostrar a quién le toca (si sos admin está bueno ver para quién es la tarea) */}
                       {userRole === 'ADMIN' && (
                         <span className="bg-gray-100 px-2 py-1 rounded-md capitalize flex items-center gap-1">
                           👤 Para: {tarea.asignado_a}
                         </span>
                       )}
                       
-                      {/* Fecha Límite */}
                       <span className={`px-2 py-1 rounded-md flex items-center gap-1 ${tarea.fecha_limite && !tarea.completada ? 'bg-orange-50 text-orange-700' : 'bg-gray-100'}`}>
                         📅 {formatearFecha(tarea.fecha_limite)}
                       </span>
 
-                      {/* Autor (quien la pidió) - AHORA SIEMPRE VISIBLE */}
                       <span className="bg-purple-50 text-purple-700 border border-purple-100 px-2 py-1 rounded-md capitalize flex items-center gap-1">
                         ✍️ Asignó: {tarea.creado_por}
                       </span>
-                      
                     </div>
                   </div>
 
-                  {/* Botón borrar (Solo ADMIN) */}
+                  {/* Botones de acción (Solo ADMIN) */}
                   {userRole === 'ADMIN' && (
-                    <button 
-                      onClick={() => handleEliminar(tarea.id)}
-                      className="text-red-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition"
-                      title="Borrar tarea"
-                    >
-                      🗑️
-                    </button>
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <button 
+                        onClick={() => handleEditar(tarea)}
+                        className="text-blue-500 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition text-sm font-medium"
+                      >
+                        Editar
+                      </button>
+                      <button 
+                        onClick={() => handleEliminar(tarea.id)}
+                        className="text-red-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition text-sm font-medium"
+                        title="Borrar tarea"
+                      >
+                        Borrar
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
@@ -174,6 +182,7 @@ export default function TareasPage() {
         onSave={() => fetchData(userRole!, currentUser!)} 
         usuarios={usuarios}
         currentUser={currentUser}
+        tareaEditando={tareaEditando} 
       />
 
     </div>
