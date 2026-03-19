@@ -165,20 +165,28 @@ export default function SongModal({ isOpen, onClose, cancionAEditar, onSave }: a
             />
           </div>
 
+          {/* CORRECCIÓN: ZONA DE ARCHIVOS PARA IOS/SAFARI */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl border">
-            <div>
+            <div className="flex flex-col gap-1">
               <label className="block text-sm font-semibold text-gray-700 mb-1">Subir Audio (.mp3, .wav)</label>
-              <input type="file" accept="audio/*" onChange={(e) => setAudioFile(e.target.files?.[0] || null)} 
-                className="w-full text-sm text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100" 
+              <input 
+                type="file" 
+                accept="audio/*" 
+                onChange={(e) => setAudioFile(e.target.files?.[0] || null)} 
+                className="block w-full text-sm text-gray-500 cursor-pointer file:cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200" 
               />
-              {cancionAEditar?.audio_url && !audioFile && <p className="text-xs text-green-600 mt-1">Ya tiene un audio cargado. Subir otro lo reemplazará.</p>}
+              {cancionAEditar?.audio_url && !audioFile && <p className="text-xs text-green-600 mt-1 font-medium">Ya tiene un audio cargado. Subir otro lo reemplazará.</p>}
             </div>
-            <div>
+            
+            <div className="flex flex-col gap-1">
               <label className="block text-sm font-semibold text-gray-700 mb-1">Subir Letra (.pdf)</label>
-              <input type="file" accept=".pdf" onChange={(e) => setLetraFile(e.target.files?.[0] || null)} 
-                className="w-full text-sm text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100" 
+              <input 
+                type="file" 
+                accept=".pdf" 
+                onChange={(e) => setLetraFile(e.target.files?.[0] || null)} 
+                className="block w-full text-sm text-gray-500 cursor-pointer file:cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200" 
               />
-              {cancionAEditar?.letra_url && !letraFile && <p className="text-xs text-green-600 mt-1">Ya tiene un PDF cargado. Subir otro lo reemplazará.</p>}
+              {cancionAEditar?.letra_url && !letraFile && <p className="text-xs text-green-600 mt-1 font-medium">Ya tiene un PDF cargado. Subir otro lo reemplazará.</p>}
             </div>
           </div>
 
