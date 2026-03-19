@@ -168,10 +168,11 @@ export default function SongModal({ isOpen, onClose, cancionAEditar, onSave }: a
           {/* CORRECCIÓN: ZONA DE ARCHIVOS PARA IOS/SAFARI */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl border">
             <div className="flex flex-col gap-1">
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Subir Audio (.mp3, .wav)</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Subir Audio (.mp3, .wav, .m4a)</label>
               <input 
                 type="file" 
-                accept="audio/*" 
+                // CAMBIO ACÁ: Ampliamos las extensiones aceptadas
+                accept=".mp3,.wav,.m4a,audio/mpeg,audio/wav" 
                 onChange={(e) => setAudioFile(e.target.files?.[0] || null)} 
                 className="block w-full text-sm text-gray-500 cursor-pointer file:cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200" 
               />
@@ -179,10 +180,11 @@ export default function SongModal({ isOpen, onClose, cancionAEditar, onSave }: a
             </div>
             
             <div className="flex flex-col gap-1">
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Subir Letra (.pdf)</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Subir Letra (.pdf, .doc)</label>
               <input 
                 type="file" 
-                accept=".pdf" 
+                // CAMBIO ACÁ: Ampliamos las extensiones aceptadas
+                accept=".pdf,.doc,.docx,application/pdf,application/msword" 
                 onChange={(e) => setLetraFile(e.target.files?.[0] || null)} 
                 className="block w-full text-sm text-gray-500 cursor-pointer file:cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200" 
               />
