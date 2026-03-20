@@ -171,8 +171,8 @@ export default function SongModal({ isOpen, onClose, cancionAEditar, onSave }: a
               <label className="block text-sm font-semibold text-gray-700 mb-1">Subir Audio (.mp3, .wav, .m4a)</label>
               <input 
                 type="file" 
-                // CAMBIO ACÁ: Ampliamos las extensiones aceptadas
-                accept=".mp3,.wav,.m4a,audio/mpeg,audio/wav" 
+                // Sumamos el audio/mp4 y x-m4a para iOS
+                accept=".mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/mp4,audio/x-m4a" 
                 onChange={(e) => setAudioFile(e.target.files?.[0] || null)} 
                 className="block w-full text-sm text-gray-500 cursor-pointer file:cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200" 
               />
@@ -180,15 +180,15 @@ export default function SongModal({ isOpen, onClose, cancionAEditar, onSave }: a
             </div>
             
             <div className="flex flex-col gap-1">
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Subir Letra (.pdf, .doc)</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Subir Letra (Doc o Imagen)</label>
               <input 
                 type="file" 
-                // CAMBIO ACÁ: Ampliamos las extensiones aceptadas
-                accept=".pdf,.doc,.docx,application/pdf,application/msword" 
+                // Sumamos los formatos de imagen comunes e image/* para que abra la galería
+                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,application/msword,image/jpeg,image/png,image/*" 
                 onChange={(e) => setLetraFile(e.target.files?.[0] || null)} 
                 className="block w-full text-sm text-gray-500 cursor-pointer file:cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200" 
               />
-              {cancionAEditar?.letra_url && !letraFile && <p className="text-xs text-green-600 mt-1 font-medium">Ya tiene un PDF cargado. Subir otro lo reemplazará.</p>}
+              {cancionAEditar?.letra_url && !letraFile && <p className="text-xs text-green-600 mt-1 font-medium">Ya tiene un archivo cargado. Subir otro lo reemplazará.</p>}
             </div>
           </div>
 
