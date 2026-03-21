@@ -1,4 +1,3 @@
-// app/tareas/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -49,9 +48,33 @@ export default function TareasPage() {
     setLoading(false)
   }
 
-  const toggleCompletada = async (id: string, estadoActual: boolean) => {
-    setTareas(tareas.map(t => t.id === id ? { ...t, completada: !estadoActual } : t))
-    await supabase.from('tareas').update({ completada: !estadoActual }).eq('id', id)
+  // 1. REEMPLAZAR LA FUNCIÓN TOGGLE COMPLETADA
+  const toggleCompletada = async (tareaActual: any) => {
+    const nuevoEstado = !tareaActual.completada
+    
+    // Actualizamos la UI al instante
+    setTareas(tareas.map(t => t.id === tareaActual.id ? { ...t, completada: nuevoEstado } : t))
+    
+    // Actualizamos la BD de la Tarea
+    await supabase.from('tareas').update({ completada: nuevoEstado }).eq('id', tareaActual.id)
+
+    // MAGIA: TRANSFERENCIA AUTOMÁTICA
+    // Si la tarea se marcó como HECHA y tiene materiales asignados...
+    if (nuevoEstado && tareaActual.materiales_ids && tareaActual.materiales_ids.length > 0) {
+        try {
+            // Pasamos todos esos materiales a nombre de la persona que completó la tarea
+            await supabase.from('materiales')
+                .update({ 
+                    asignado_a: currentUser, // O la columna que uses en materiales para la custodia
+                    sede_id: null // Opcional: le sacamos la sede fija porque ahora lo tiene la persona en la mano
+                })
+                .in('id', tareaActual.materiales_ids)
+            
+            alert(`¡Materiales transferidos automáticamente a tu nombre (${currentUser})!`)
+        } catch(e) {
+            console.error("Error al transferir materiales", e)
+        }
+    }
   }
 
   const handleEliminar = async (id: string) => {
@@ -120,20 +143,28 @@ export default function TareasPage() {
                   }`}
                 >
                   <div className="flex items-start gap-4">
+                    
+                    {/* BOTÓN CON LA NUEVA FUNCIÓN */}
                     <button 
-                        onClick={() => toggleCompletada(tarea.id, tarea.completada)}
-                        className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors mt-0.5 ${
-                        tarea.completada 
-                            ? 'bg-green-500 border-green-500 text-white' 
-                            : 'border-gray-300 hover:border-orange-500'
-                        }`}
+                        onClick={() => toggleCompletada(tarea)}
+                        className="shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 group focus:outline-none"
+                        style={{
+                            borderColor: tarea.completada ? '#22c55e' : '#d1d5db',
+                            backgroundColor: tarea.completada ? '#22c55e' : 'transparent',
+                        }}
+                        title={tarea.completada ? "Marcar como pendiente" : "Marcar como completada"}
                     >
-                        {tarea.completada && <span>✓</span>}
+                        <svg 
+                            className={`w-5 h-5 text-white transition-opacity ${tarea.completada ? 'opacity-100' : 'opacity-0 group-hover:text-orange-400 group-hover:opacity-50'}`} 
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
                     </button>
 
                     <div className="flex-grow">
-                        <p className={`text-lg font-medium ${tarea.completada ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
-                        {tarea.descripcion}
+                        <p className={`text-lg font-medium whitespace-pre-wrap ${tarea.completada ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
+                           {tarea.descripcion}
                         </p>
                         
                         <div className="flex flex-wrap gap-3 mt-2 text-xs font-semibold text-gray-500">
@@ -186,14 +217,16 @@ export default function TareasPage() {
       )}
 
       {/* MODAL */}
-      <TareaModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        onSave={() => fetchData(userRole!, currentUser!)} 
-        usuarios={usuarios}
-        currentUser={currentUser}
-        tareaEditando={tareaEditando} 
-      />
+      {isModalOpen && (
+        <TareaModal 
+          isOpen={isModalOpen} 
+          onClose={() => setIsModalOpen(false)} 
+          onSave={() => fetchData(userRole!, currentUser!)} 
+          usuarios={usuarios}
+          currentUser={currentUser}
+          tareaEditando={tareaEditando} 
+        />
+      )}
 
     </div>
   )

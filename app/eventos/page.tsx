@@ -71,7 +71,8 @@ export default function EventosPage() {
           descripcion: `🎒 Preparar bolso para evento "${formEvento.titulo}": Llevar ${nombresMateriales}.`,
           asignado_a: formEvento.usuario_asignado,
           creado_por: currentUser,
-          fecha_limite: formEvento.fecha
+          fecha_limite: formEvento.fecha,
+          materiales_ids: formEvento.materiales.map((m:any) => m.id) // AGREGADO: Pasamos los IDs de los materiales
         }])
       }
     }

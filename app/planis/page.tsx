@@ -3,22 +3,21 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import PlaniModal from '../components/PlaniModal'
-import Cookies from 'js-cookie' // <-- AGREGADO
+import Cookies from 'js-cookie' 
 
 export default function PlanisPage() {
   const [planis, setPlanis] = useState<any[]>([])
   const [cancionesParaCatalogo, setCancionesParaCatalogo] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  // NUEVO: Estado para el inventario
+  const [materialesInventario, setMaterialesInventario] = useState<any[]>([])
   
-  // <-- AGREGADO: Estado para el rol
+  const [loading, setLoading] = useState(true)
   const [userRole, setUserRole] = useState<string | null>(null)
 
-  // Estados para el Modal de Planis
   const [isPlaniModalOpen, setIsPlaniModalOpen] = useState(false)
   const [planiEditando, setPlaniEditando] = useState<any>(null)
 
   useEffect(() => {
-    // Leemos el rol
     setUserRole(Cookies.get('coplitas_role') || 'USER')
     fetchData()
   }, [])
@@ -26,7 +25,7 @@ export default function PlanisPage() {
   const fetchData = async () => {
     setLoading(true)
     
-    // 1. Necesitamos traer el catálogo de canciones para pasárselo al PlaniModal
+    // 1. Traer el catálogo de canciones
     const { data: dataCanciones } = await supabase
       .from('canciones')
       .select(`
@@ -36,15 +35,21 @@ export default function PlanisPage() {
       `)
       .order('titulo')
 
-    if (dataCanciones) {
-      setCancionesParaCatalogo(dataCanciones)
-    }
+    if (dataCanciones) setCancionesParaCatalogo(dataCanciones)
 
-    // 2. Traer las Planificaciones armadas
+    // 2. NUEVO: Traer materiales para pasárselos al Modal
+    const { data: dataMateriales } = await supabase
+      .from('materiales')
+      .select('id, nombre')
+      .order('nombre')
+      
+    if (dataMateriales) setMaterialesInventario(dataMateriales)
+
+    // 3. Traer las Planificaciones armadas (ahora leemos también la columna 'materiales')
     const { data: dataPlanis } = await supabase
       .from('planificaciones')
       .select(`
-        id, titulo, descripcion, created_at,
+        id, titulo, descripcion, created_at, materiales,
         planificacion_cancion (
           orden,
           nota,
@@ -53,9 +58,7 @@ export default function PlanisPage() {
       `)
       .order('created_at', { ascending: false })
 
-    if (dataPlanis) {
-      setPlanis(dataPlanis)
-    }
+    if (dataPlanis) setPlanis(dataPlanis)
 
     setLoading(false)
   }
@@ -78,6 +81,12 @@ export default function PlanisPage() {
     }
   }
 
+  // Helper para buscar el nombre de un material dado su ID
+  const getNombreMaterial = (id: string) => {
+    const mat = materialesInventario.find(m => m.id === id)
+    return mat ? mat.nombre : 'Material Desconocido'
+  }
+
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto min-h-screen">
       
@@ -88,7 +97,6 @@ export default function PlanisPage() {
           <p className="text-gray-600">Armado y estructura de las rondas</p>
         </div>
         
-        {/* <-- AGREGADO: Solo ADMIN puede armar Planis */}
         {userRole === 'ADMIN' && (
           <button 
             onClick={handleNuevaPlani} 
@@ -111,13 +119,11 @@ export default function PlanisPage() {
           ) : (
             <div className="grid gap-6">
               {planis.map((plani) => {
-                // Ordenamos las canciones de la plani para que se muestren en el orden correcto
                 const cancionesDePlani = [...plani.planificacion_cancion].sort((a: any, b: any) => a.orden - b.orden);
 
                 return (
                   <div key={plani.id} className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-100 relative group border-t-4 border-t-emerald-500">
                     
-                    {/* <-- AGREGADO: Solo ADMIN ve botones Editar/Borrar */}
                     {userRole === 'ADMIN' && (
                       <div className="absolute top-4 right-4 flex gap-2">
                         <button onClick={() => handleEditarPlani(plani)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg text-sm font-medium transition">
@@ -130,7 +136,21 @@ export default function PlanisPage() {
                     )}
 
                     <h2 className={`text-2xl font-bold mb-1 text-gray-800 ${userRole === 'ADMIN' ? 'pr-32' : ''}`}>{plani.titulo}</h2>
-                    {plani.descripcion && <p className="text-gray-600 mb-6">{plani.descripcion}</p>}
+                    {plani.descripcion && <p className="text-gray-600 mb-4">{plani.descripcion}</p>}
+
+                    {/* NUEVO: ZONA DE MATERIALES REQUERIDOS */}
+                    {plani.materiales && plani.materiales.length > 0 && (
+                        <div className="mb-6 bg-amber-50 p-4 rounded-xl border border-amber-100">
+                            <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-2 flex items-center gap-1"><span>📦</span> Materiales necesarios</h3>
+                            <div className="flex flex-wrap gap-2">
+                                {plani.materiales.map((matId: string, idx: number) => (
+                                    <span key={idx} className="bg-white border border-amber-200 text-amber-900 text-xs px-2.5 py-1 rounded-md font-medium shadow-sm">
+                                        {getNombreMaterial(matId)}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     <div>
                       <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Estructura de la sesión</h3>
@@ -152,7 +172,6 @@ export default function PlanisPage() {
                               </div>
                             </div>
                             
-                            {/* Mostrar la nota de transición si existe */}
                             {item.nota && (
                               <div className="ml-9 mt-2 text-sm text-emerald-700 bg-emerald-50/50 px-3 py-2 rounded-lg border border-emerald-100/50 flex items-start">
                                 <span className="mr-2 opacity-50">💬</span> 
@@ -171,13 +190,14 @@ export default function PlanisPage() {
         </div>
       )}
 
-      {/* RENDERIZADO DEL MODAL */}
+      {/* RENDERIZADO DEL MODAL: Ahora le pasamos también el inventario */}
       <PlaniModal 
         isOpen={isPlaniModalOpen} 
         onClose={() => setIsPlaniModalOpen(false)} 
         planiAEditar={planiEditando} 
         onSave={fetchData} 
         catalogo={cancionesParaCatalogo} 
+        inventario={materialesInventario} // <-- NUEVO PROP
       />
 
     </div>

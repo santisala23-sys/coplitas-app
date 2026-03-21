@@ -21,12 +21,15 @@ export default function Navbar() {
   if (pathname === '/login') return null
 
   const navLinks = [
-    { name: 'Inicio', href: '/', icon: '🏠', exact: true },
-    { name: 'Canciones', href: '/catalogo', icon: '🎵' },
-    { name: 'Planis', href: '/planis', icon: '📋' },
-    { name: 'Eventos', href: '/eventos', icon: '🎉' },
-    { name: 'Tareas', href: '/tareas', icon: '✅' },
-    { name: 'Inventario', href: '/inventario', icon: '📦' },
+    { name: 'Inicio', href: '/', icon: '', exact: true },
+    { name: 'Calendario', href: '/calendario', icon: '' },
+    { name: 'Canciones', href: '/catalogo', icon: '' },
+    { name: 'Planis', href: '/planis', icon: '' },
+    { name: 'Eventos', href: '/eventos', icon: '' },
+    { name: 'Sedes', href: '/sedes', icon: '' },
+    { name: 'Rutas', href: '/rutas', icon: '' },
+    { name: 'Tareas', href: '/tareas', icon: '' },
+    { name: 'Inventario', href: '/inventario', icon: '' },
   ]
 
   const handleLogout = () => {
@@ -43,7 +46,7 @@ export default function Navbar() {
       <aside className="hidden md:flex flex-col justify-between w-64 bg-white border-r min-h-screen fixed left-0 top-0 p-4 z-50">
         <div>
           <div className="mb-8 p-2">
-            <h2 className="text-xl font-bold text-purple-700">Coplitas App</h2>
+            <h2 className="text-xl font-bold text-purple-700">Coplitas</h2>
             <p className="text-xs text-gray-500">Hola, <span className="capitalize font-semibold">{username}</span> 👋</p>
           </div>
 

@@ -1,13 +1,26 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
-export default function TareaModal({ isOpen, onClose, onSave, usuarios, currentUser }: any) {
+export default function TareaModal({ isOpen, onClose, onSave, usuarios, currentUser, tareaEditando }: any) {
   const [descripcion, setDescripcion] = useState('')
   const [asignadoA, setAsignadoA] = useState('')
   const [fechaLimite, setFechaLimite] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+
+  // ESTO ES CLAVE: Cargar los datos si estamos editando
+  useEffect(() => {
+    if (tareaEditando) {
+      setDescripcion(tareaEditando.descripcion || '')
+      setAsignadoA(tareaEditando.asignado_a || '')
+      setFechaLimite(tareaEditando.fecha_limite || '')
+    } else {
+      setDescripcion('')
+      setAsignadoA('')
+      setFechaLimite('')
+    }
+  }, [tareaEditando, isOpen])
 
   if (!isOpen) return null
 
@@ -16,19 +29,25 @@ export default function TareaModal({ isOpen, onClose, onSave, usuarios, currentU
     setIsSaving(true)
 
     try {
-      const { error } = await supabase.from('tareas').insert([{ 
-        descripcion, 
-        asignado_a: asignadoA, 
-        creado_por: currentUser,
-        fecha_limite: fechaLimite || null // Si no ponen fecha, queda vacía
-      }])
+      if (tareaEditando) {
+        // Si estamos editando, hacemos un UPDATE
+        const { error } = await supabase.from('tareas').update({
+          descripcion,
+          asignado_a: asignadoA,
+          fecha_limite: fechaLimite || null
+        }).eq('id', tareaEditando.id)
+        if (error) throw error
+      } else {
+        // Si es nueva, hacemos un INSERT
+        const { error } = await supabase.from('tareas').insert([{ 
+          descripcion, 
+          asignado_a: asignadoA, 
+          creado_por: currentUser,
+          fecha_limite: fechaLimite || null 
+        }])
+        if (error) throw error
+      }
 
-      if (error) throw error
-
-      // Limpiamos el formulario y cerramos
-      setDescripcion('')
-      setAsignadoA('')
-      setFechaLimite('')
       onSave()
       onClose()
     } catch (error) {
@@ -44,7 +63,9 @@ export default function TareaModal({ isOpen, onClose, onSave, usuarios, currentU
       <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col">
         
         <div className="p-5 border-b bg-white flex justify-between items-center">
-          <h2 className="text-xl font-bold text-gray-800">Asignar Nueva Tarea</h2>
+          <h2 className="text-xl font-bold text-gray-800">
+            {tareaEditando ? 'Editar Tarea' : 'Asignar Nueva Tarea'}
+          </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-800 font-bold text-xl p-2 rounded-full hover:bg-gray-100 transition">✕</button>
         </div>
 
@@ -89,10 +110,10 @@ export default function TareaModal({ isOpen, onClose, onSave, usuarios, currentU
             </div>
           </div>
 
-          <div className="mt-4 flex justify-end gap-3 pt-2">
+          <div className="mt-4 flex justify-end gap-3 pt-2 border-t">
             <button type="button" onClick={onClose} className="px-5 py-3 rounded-xl font-medium text-gray-600 hover:bg-gray-100 transition">Cancelar</button>
             <button type="submit" disabled={isSaving || !descripcion || !asignadoA} className="px-6 py-3 rounded-xl font-bold bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 transition shadow-sm">
-              {isSaving ? 'Guardando...' : 'Asignar Tarea'}
+              {isSaving ? 'Guardando...' : (tareaEditando ? 'Guardar Cambios' : 'Asignar Tarea')}
             </button>
           </div>
         </form>
