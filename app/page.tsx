@@ -9,17 +9,19 @@ export default function HomePage() {
   const [stats, setStats] = useState({ canciones: 0, planis: 0, tareas: 0, sedes: 0, materiales: 0, eventos: 0 })
   const [loading, setLoading] = useState(true)
   const [userRole, setUserRole] = useState<string | null>(null)
+  const [currentUsername, setCurrentUsername] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchStats() {
       const role = Cookies.get('coplitas_role') || 'USER'
+      const user = Cookies.get('coplitas_user') || ''
       setUserRole(role)
+      setCurrentUsername(user)
 
       // Contadores globales
       const { count: cancionesCount } = await supabase.from('canciones').select('*', { count: 'exact', head: true })
       const { count: planisCount } = await supabase.from('planificaciones').select('*', { count: 'exact', head: true })
       const { count: materialesCount } = await supabase.from('materiales').select('*', { count: 'exact', head: true })
-      const { count: eventosCount } = await supabase.from('eventos').select('*', { count: 'exact', head: true }).eq('estado', 'PENDIENTE')
 
       // Contador de Sedes (solo nos importan las ACTIVAS para mostrar en la tarjeta)
       let sedesCount = 0
@@ -28,24 +30,24 @@ export default function HomePage() {
         sedesCount = count || 0
       }
 
-      // Contador de Tareas (solo las pendientes del usuario logueado)
-      const currentUser = Cookies.get('coplitas_user')
-      let tareasCount = 0
-
-      if (currentUser) {
-        const { count } = await supabase
-          .from('tareas')
-          .select('*', { count: 'exact', head: true })
-          .eq('asignado_a', currentUser)
-          .eq('completada', false)
-        
-        tareasCount = count || 0
+      // Contador de Eventos
+      let queryEventos = supabase.from('eventos').select('*', { count: 'exact', head: true }).eq('estado', 'PENDIENTE')
+      if (role !== 'ADMIN' && user) {
+        queryEventos = queryEventos.eq('usuario_asignado', user)
       }
+      const { count: eventosCount } = await queryEventos
+
+      // Contador de Tareas
+      let queryTareas = supabase.from('tareas').select('*', { count: 'exact', head: true }).eq('completada', false)
+      if (role !== 'ADMIN' && user) {
+        queryTareas = queryTareas.eq('asignado_a', user)
+      }
+      const { count: tareasCount } = await queryTareas
 
       setStats({
         canciones: cancionesCount || 0,
         planis: planisCount || 0,
-        tareas: tareasCount,
+        tareas: tareasCount || 0,
         sedes: sedesCount,
         materiales: materialesCount || 0,
         eventos: eventosCount || 0
@@ -61,8 +63,12 @@ export default function HomePage() {
       
       {/* Mensaje de Bienvenida */}
       <div className="mb-10 text-center">
-        <h1 className="text-4xl md:text-5xl font-bold text-gray-800 mb-3">¡Hola! </h1>
-        <p className="text-lg md:text-xl text-gray-600">Panel de control de Coplitas.</p>
+        <h1 className="text-4xl md:text-5xl font-bold text-gray-800 mb-3 capitalize">
+          ¡Hola {currentUsername}!
+        </h1>
+        <p className="text-lg md:text-xl text-gray-600">
+          {userRole === 'ADMIN' ? 'Panel de control de Coplitas.' : 'Este es tu resumen para hoy.'}
+        </p>
       </div>
 
       {/* Grilla de Módulos Activos */}
@@ -73,7 +79,17 @@ export default function HomePage() {
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Tareas</h2>
           <p className="text-gray-500 mb-6 flex-grow">Gestión de pendientes y pedidos de materiales.</p>
           <div className={`${stats.tareas > 0 ? 'bg-orange-100' : 'bg-gray-100'} w-full py-3 rounded-xl transition-colors`}>
-            {loading ? ( <div className="flex justify-center"><div className="w-5 h-5 border-2 border-orange-300 border-t-orange-600 rounded-full animate-spin"></div></div> ) : ( <p className={`${stats.tareas > 0 ? 'text-orange-700' : 'text-gray-500'} font-medium`}>{stats.tareas > 0 ? ( <>Tenés <strong className="text-lg">{stats.tareas}</strong> pendiente(s)</> ) : ( <>Todo al día.</> )}</p> )}
+            {loading ? ( 
+              <div className="flex justify-center"><div className="w-5 h-5 border-2 border-orange-300 border-t-orange-600 rounded-full animate-spin"></div></div> 
+            ) : ( 
+              <p className={`${stats.tareas > 0 ? 'text-orange-700' : 'text-gray-500'} font-medium`}>
+                {stats.tareas > 0 ? ( 
+                  <>Tenés <strong className="text-lg">{stats.tareas}</strong> pendiente(s)</> 
+                ) : ( 
+                  <>Todo al día.</> 
+                )}
+              </p> 
+            )}
           </div>
         </Link>
 
@@ -82,7 +98,17 @@ export default function HomePage() {
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Eventos</h2>
           <p className="text-gray-500 mb-6 flex-grow">Cumpleaños, talleres y rondas esporádicas. Asignaciones y materiales.</p>
           <div className="bg-rose-100/50 w-full py-3 rounded-xl">
-            {loading ? ( <div className="flex justify-center"><div className="w-5 h-5 border-2 border-rose-300 border-t-rose-600 rounded-full animate-spin"></div></div> ) : ( <p className="text-rose-700 font-medium"><strong className="text-lg">{stats.eventos}</strong> próximos eventos</p> )}
+            {loading ? ( 
+              <div className="flex justify-center"><div className="w-5 h-5 border-2 border-rose-300 border-t-rose-600 rounded-full animate-spin"></div></div> 
+            ) : ( 
+              <p className="text-rose-700 font-medium">
+                {stats.eventos > 0 ? (
+                  <><strong className="text-lg">{stats.eventos}</strong> próximos eventos</>
+                ) : (
+                  <>Sin eventos pendientes.</>
+                )}
+              </p> 
+            )}
           </div>
         </Link>
 

@@ -31,11 +31,16 @@ export default function TareasPage() {
   const fetchData = async (role: string, user: string) => {
     setLoading(true)
     
-    if (role === 'ADMIN') {
-      const { data: dataUsuarios } = await supabase.from('usuarios').select('id, username').eq('activo', true).order('username')
-      if (dataUsuarios) setUsuarios(dataUsuarios)
-    }
+    // 1. Traemos TODOS los usuarios con su celular, no importa si es admin o no.
+    const { data: dataUsuarios } = await supabase
+        .from('usuarios')
+        .select('id, username, celular') // ACÁ SUMAMOS CELULAR
+        .eq('activo', true)
+        .order('username')
+    
+    if (dataUsuarios) setUsuarios(dataUsuarios)
 
+    // 2. Traemos las tareas de forma simple
     let query = supabase.from('tareas').select('*').order('completada', { ascending: true }).order('fecha_limite', { ascending: true, nullsFirst: false })
     
     if (role !== 'ADMIN') {
@@ -48,25 +53,35 @@ export default function TareasPage() {
     setLoading(false)
   }
 
-  // 1. REEMPLAZAR LA FUNCIÓN TOGGLE COMPLETADA
+  // NUEVA FUNCIÓN: Enviar WhatsApp Corregida
+  const enviarWhatsApp = (tarea: any) => {
+    const usuarioAsignado = usuarios.find(u => u.username === tarea.asignado_a)
+    const celular = usuarioAsignado?.celular
+
+    if (!celular) {
+      alert(`La persona asignada (${tarea.asignado_a}) no tiene un número de celular cargado en el sistema.`)
+      return
+    }
+
+    const mensaje = encodeURIComponent(
+      `¡Hola! Te escribo por una tarea de Coplitas:\n\n📌 *${tarea.descripcion}*\n📅 Fecha límite: ${formatearFecha(tarea.fecha_limite)}\n\n¡Gracias!`
+    )
+    
+    window.open(`https://wa.me/${celular}?text=${mensaje}`, '_blank')
+  }
+
   const toggleCompletada = async (tareaActual: any) => {
     const nuevoEstado = !tareaActual.completada
     
-    // Actualizamos la UI al instante
     setTareas(tareas.map(t => t.id === tareaActual.id ? { ...t, completada: nuevoEstado } : t))
-    
-    // Actualizamos la BD de la Tarea
     await supabase.from('tareas').update({ completada: nuevoEstado }).eq('id', tareaActual.id)
 
-    // MAGIA: TRANSFERENCIA AUTOMÁTICA
-    // Si la tarea se marcó como HECHA y tiene materiales asignados...
     if (nuevoEstado && tareaActual.materiales_ids && tareaActual.materiales_ids.length > 0) {
         try {
-            // Pasamos todos esos materiales a nombre de la persona que completó la tarea
             await supabase.from('materiales')
                 .update({ 
-                    asignado_a: currentUser, // O la columna que uses en materiales para la custodia
-                    sede_id: null // Opcional: le sacamos la sede fija porque ahora lo tiene la persona en la mano
+                    asignado_a: currentUser, 
+                    sede_id: null 
                 })
                 .in('id', tareaActual.materiales_ids)
             
@@ -144,7 +159,6 @@ export default function TareasPage() {
                 >
                   <div className="flex items-start gap-4">
                     
-                    {/* BOTÓN CON LA NUEVA FUNCIÓN */}
                     <button 
                         onClick={() => toggleCompletada(tarea)}
                         className="shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 group focus:outline-none"
@@ -186,6 +200,18 @@ export default function TareasPage() {
 
                     {userRole === 'ADMIN' && (
                         <div className="flex flex-col gap-2 shrink-0">
+                        
+                        {/* NUEVO BOTÓN WHATSAPP */}
+                        {!tarea.completada && (
+                          <button 
+                            onClick={() => enviarWhatsApp(tarea)}
+                            className="bg-green-50 text-green-600 hover:bg-green-600 hover:text-white p-2 rounded-lg transition text-xs font-bold flex items-center justify-center gap-1 border border-green-200"
+                            title="Avisar por WhatsApp"
+                          >
+                            <span>💬</span> WhatsApp
+                          </button>
+                        )}
+
                         <button 
                             onClick={() => handleEditar(tarea)}
                             className="text-blue-500 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition text-sm font-medium"
